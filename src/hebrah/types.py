@@ -6,6 +6,24 @@ from typing import Any, TypedDict
 DEFAULT_BASE_URL = "https://api.hebrah.com"
 
 
+class SandboxScenarioSummary(TypedDict, total=False):
+    id: str
+    name: str
+    description: str
+    events: list[str]
+    delay_seconds: float | int
+
+
+class SandboxDomainSummary(TypedDict, total=False):
+    id: str
+    name: str
+    description: str
+    events: list[str]
+    resource_types: list[str]
+    hl7_message_types: dict[str, str]
+    scenarios: list[SandboxScenarioSummary]
+
+
 class SandboxCatalog(TypedDict, total=False):
     org_id: str
     org_name: str
@@ -15,10 +33,34 @@ class SandboxCatalog(TypedDict, total=False):
     supported_events: list[str]
     example_patient_response: dict[str, Any]
     example_webhook_envelope: dict[str, Any]
+    sandbox_domains: list[SandboxDomainSummary]
+    event_groups: dict[str, list[str]]
+    example_envelopes: dict[str, dict[str, Any]]
     ehr_vendor: str | None
     data_format: str | None
     resource_types: list[str] | None
-    field_mappings: dict[str, Any] | None
+    field_mappings: list[dict[str, Any]] | None
+
+
+class SandboxResourceListResponse(TypedDict):
+    resource_type: str
+    ids: list[str]
+
+
+class PayerRules(TypedDict):
+    id: str
+    name: str
+    required_documents: list[str]
+    typical_pend_reasons: list[str]
+    typical_denial_reasons: list[str]
+
+
+class RunScenarioResponse(TypedDict):
+    status: str
+    scenario_id: str
+    connection_id: str
+    events: list[str]
+    envelope_previews: list[dict[str, Any]]
 
 
 class PatientSummary(TypedDict):
@@ -35,6 +77,7 @@ class TriggerMockEventResponse(TypedDict, total=False):
     patient_id: str
     connection_id: str
     envelope_preview: dict[str, Any]
+    scenario_id: str
 
 
 class WebhookEventEnvelope(TypedDict, total=False):
