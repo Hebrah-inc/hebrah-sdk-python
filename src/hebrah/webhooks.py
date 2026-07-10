@@ -24,6 +24,9 @@ def verify_webhook_signature(
         hashlib.sha256,
     ).hexdigest()
 
+    if len(signature_header) != len(expected):
+        raise ValueError("Invalid webhook signature")
+
     if not hmac.compare_digest(expected, signature_header):
         raise ValueError("Invalid webhook signature")
 

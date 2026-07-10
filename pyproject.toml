@@ -40,6 +40,9 @@ Repository = "https://github.com/Hebrah-inc/hebrah-sdk-python"
 [tool.hatch.build.targets.wheel]
 packages = ["src/hebrah"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"SECURITY.md" = "SECURITY.md"
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
