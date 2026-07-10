@@ -19,9 +19,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - run: pip install pip-audit "httpx>=0.27.0"
+      - run: pip-audit --strict
       - run: pip install -e ".[dev]"
-      - run: pip install pip-audit
-      - run: pip-audit --strict --skip-editable
       - run: ruff check src tests
       - run: pytest
 
