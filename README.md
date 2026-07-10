@@ -111,34 +111,6 @@ See [SECURITY.md](./SECURITY.md) for supported versions and vulnerability report
 | `HEBRAH_CONNECTION_ID` | Optional; pass to `default_connection_id` for sandbox reads |
 | `HEBRAH_WEBHOOK_SECRET` | For `verify_webhook_signature` |
 
-## Local development
-
-```bash
-export HEBRAH_API_BASE_URL=http://localhost:8000
-export HEBRAH_API_KEY=hb_test_your_key
-export HEBRAH_CONNECTION_ID=conn-sa-your_connection_id
-```
-
-Start hebrah-api: `docker compose up --build` in the [hebrah-api](https://github.com/Hebrah-inc/hebrah-api) repo.
-
-## Development
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-pytest
-ruff check src tests
-```
-
-## Publishing
-
-Tag releases as `sdk-python-v0.8.0` to trigger GitHub Actions publish to PyPI.
-
-Preferred: configure **trusted publishing** (OIDC) on PyPI for `Hebrah-inc/hebrah-sdk-python`. Fallback: set repo variable `PUBLISH_WITH_PYPI_TOKEN=true` and `PYPI_API_TOKEN` in the `pypi` environment.
-
-See [PUBLISHING.md](./PUBLISHING.md) for the full release checklist.
-
 ## Docs
 
 Full integrator reference: [hebrah-app `/docs/sdk`](https://app.hebrah.com/docs/sdk).
