@@ -21,7 +21,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       - run: pip install pip-audit
-      - run: pip-audit --strict
+      - run: pip-audit --strict --skip-editable
       - run: ruff check src tests
       - run: pytest
 
