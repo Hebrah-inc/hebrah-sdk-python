@@ -93,6 +93,29 @@ class WebhookEventEnvelope(TypedDict, total=False):
     latency_ms: int
 
 
+LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]"})
+
+
+def assert_safe_base_url(url: str) -> None:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError(f"Invalid base_url: {url}")
+
+    if parsed.scheme == "https":
+        return
+
+    if parsed.scheme == "http" and parsed.hostname in LOCAL_HTTP_HOSTS:
+        return
+
+    raise ValueError(
+        "base_url must use https:// or http://localhost/127.0.0.1 for local development "
+        f"(got {parsed.scheme}://{parsed.hostname})"
+    )
+
+
 def resolve_base_url(base_url: str | None = None) -> str:
-    url = base_url or os.environ.get("HEBRAH_API_BASE_URL") or DEFAULT_BASE_URL
-    return url.rstrip("/")
+    url = (base_url or os.environ.get("HEBRAH_API_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
+    assert_safe_base_url(url)
+    return url

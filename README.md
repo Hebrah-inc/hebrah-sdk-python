@@ -44,7 +44,18 @@ payload = verify_webhook_signature(
 )
 ```
 
+## Security
+
+- Store `HEBRAH_API_KEY` and `HEBRAH_WEBHOOK_SECRET` in server-side environment variables or a secrets manager only — never expose them to browsers or commit `.env` files.
+- The SDK does not persist credentials; they live in memory for the lifetime of each `HebrahClient` instance.
+- `base_url` must be `https://` in production, or `http://localhost` / `http://127.0.0.1` for local dev — other `http://` hosts are rejected at construction to reduce API-key exfiltration risk.
+- Treat `HebrahApiError.detail` as operator-only diagnostics. Do not log or return it to end users — it may contain internal paths or sensitive API error payloads. Set `include_error_detail=False` on `HebrahClient` to omit `detail` from errors.
+
+See [SECURITY.md](./SECURITY.md) for supported versions and vulnerability reporting.
+
 ## API surface (v0.8)
+
+### Sandbox & resources
 
 | Method | Description |
 |--------|-------------|
@@ -61,8 +72,35 @@ payload = verify_webhook_signature(
 | `client.sandbox.payer_rules(payer_id)` | `GET /v1/sandbox/payer-rules/{id}` |
 | `client.patients.list(connection_id=None)` | **Deprecated** — `GET /v1/patients` |
 | `client.patients.get(id, connection_id=None)` | **Deprecated** — `GET /v1/patients/{id}` |
+
+### HL7, webhooks, interop
+
+| Method | Description |
+|--------|-------------|
+| `client.sandbox.hl7_templates()` | `GET /v1/sandbox/hl7/templates` |
+| `client.sandbox.inject_hl7(...)` | `POST /v1/sandbox/hl7/inject` |
+| `client.sandbox.configure_webhook_reliability(**profile)` | `PATCH /v1/sandbox/webhook-reliability` |
+| `client.sandbox.run_webhook_reliability_scenario(scenario_id, ...)` | `POST /v1/sandbox/scenarios/{id}/run` (alias) |
+| `client.sandbox.run_mpi_match(...)` | `POST /v1/sandbox/mpi/match` |
+| `client.sandbox.run_aggregator_query(...)` | `POST /v1/sandbox/aggregator/query` |
+| `client.sandbox.get_practitioner_credentialing(practitioner_id)` | `GET /v1/sandbox/credentialing/practitioners/{id}` |
 | `client.webhooks.trigger_mock_event(...)` | `POST /v1/webhooks/trigger-mock-event` |
+| `client.webhooks.list_deliveries(...)` | `GET /v1/webhooks/deliveries` |
+| `client.webhooks.replay_delivery(delivery_id)` | `POST /v1/webhooks/deliveries/{id}/replay` |
 | `verify_webhook_signature(raw_body, signature, secret)` | Local HMAC-SHA256 verify |
+
+### SMART & FHIR
+
+| Method | Description |
+|--------|-------------|
+| `client.smart.launch(...)` | `POST /v1/smart/launch` |
+| `client.smart.register_client(...)` | `POST /v1/smart/clients` |
+| `client.smart.exchange_token(...)` | `POST /oauth/token` (form-encoded; no API key) |
+| `client.fhir.read_patient(patient_id, access_token)` | `GET /fhir/R4/Patient/{id}` (SMART access token) |
+
+### Advanced: BYOM agent harness
+
+`HebrahAgentHarness` is exported for bring-your-own-model EHR workflows (MCP + integration-agent). It is **not** part of the core integrator quick start — harness improvements are tracked separately from the core client.
 
 ## Configuration
 
@@ -95,9 +133,11 @@ ruff check src tests
 
 ## Publishing
 
-Tag releases as `sdk-python-v0.1.0` to trigger GitHub Actions publish to PyPI.
+Tag releases as `sdk-python-v0.8.0` to trigger GitHub Actions publish to PyPI.
 
-Configure **trusted publishing** (OIDC) on PyPI for this GitHub repository (recommended), or set the `PYPI_API_TOKEN` repository secret.
+Preferred: configure **trusted publishing** (OIDC) on PyPI for `Hebrah-inc/hebrah-sdk-python`. Fallback: set repo variable `PUBLISH_WITH_PYPI_TOKEN=true` and `PYPI_API_TOKEN` in the `pypi` environment.
+
+See [PUBLISHING.md](./PUBLISHING.md) for the full release checklist.
 
 ## Docs
 

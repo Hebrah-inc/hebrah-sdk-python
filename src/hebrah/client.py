@@ -260,23 +260,31 @@ class _SmartResource:
         client_id: str,
         code_verifier: str,
     ) -> dict[str, Any]:
-        response = httpx.post(
-            f"{self._client._base_url}/oauth/token",
-            data={
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
-                "client_id": client_id,
-                "code_verifier": code_verifier,
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-            timeout=30.0,
-        )
+        try:
+            response = httpx.post(
+                f"{self._client._base_url}/oauth/token",
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                    "client_id": client_id,
+                    "code_verifier": code_verifier,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=30.0,
+            )
+        except httpx.TimeoutException as exc:
+            raise HebrahApiError("SMART token exchange timed out", 504) from exc
+        except httpx.RequestError as exc:
+            raise HebrahApiError(
+                "SMART token exchange failed: control plane unreachable",
+                503,
+            ) from exc
         if not response.is_success:
             raise HebrahApiError(
                 f"SMART token exchange failed ({response.status_code})",
                 response.status_code,
-                response.text,
+                self._client._error_detail(response.text),
             )
         return response.json()
 
@@ -288,19 +296,27 @@ class _FhirResource:
     def read_patient(self, patient_id: str, access_token: str) -> dict[str, Any]:
         from urllib.parse import quote
 
-        response = httpx.get(
-            f"{self._client._base_url}/fhir/R4/Patient/{quote(patient_id, safe='')}",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/fhir+json",
-            },
-            timeout=30.0,
-        )
+        try:
+            response = httpx.get(
+                f"{self._client._base_url}/fhir/R4/Patient/{quote(patient_id, safe='')}",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Accept": "application/fhir+json",
+                },
+                timeout=30.0,
+            )
+        except httpx.TimeoutException as exc:
+            raise HebrahApiError("FHIR Patient read timed out", 504) from exc
+        except httpx.RequestError as exc:
+            raise HebrahApiError(
+                "FHIR Patient read failed: control plane unreachable",
+                503,
+            ) from exc
         if not response.is_success:
             raise HebrahApiError(
                 f"FHIR Patient read failed ({response.status_code})",
                 response.status_code,
-                response.text,
+                self._client._error_detail(response.text),
             )
         return response.json()
 
@@ -311,7 +327,8 @@ class _PatientsResource:
 
     def list(self, *, connection_id: str | None = None) -> PatientListResponse:
         warnings.warn(
-            "patients.list() is deprecated; use sandbox.list_synthetic_resources('Patient', connection_id=...).",
+            "patients.list() is deprecated; use "
+            "sandbox.list_synthetic_resources('Patient', connection_id=...).",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -323,7 +340,8 @@ class _PatientsResource:
 
     def get(self, patient_id: str, *, connection_id: str | None = None) -> dict[str, Any]:
         warnings.warn(
-            "patients.get() is deprecated; use sandbox.resource('Patient', patient_id) for connection-scoped reads.",
+            "patients.get() is deprecated; use sandbox.resource('Patient', patient_id) "
+            "for connection-scoped reads.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -376,7 +394,6 @@ class _WebhooksResource:
         limit: int | None = None,
     ) -> dict[str, Any]:
         params: dict[str, str] = {}
-        params: dict[str, str] = {}
         resolved_connection = self._client._resolve_connection_id(connection_id)
         if resolved_connection:
             params["connection_id"] = resolved_connection
@@ -406,12 +423,16 @@ class HebrahClient:
         api_key: str,
         base_url: str | None = None,
         default_connection_id: str | None = None,
+        include_error_detail: bool = True,
     ) -> None:
         if not api_key or not api_key.strip():
             raise ValueError("api_key is required")
         self._api_key = api_key.strip()
         self._base_url = resolve_base_url(base_url)
-        self._default_connection_id = default_connection_id.strip() if default_connection_id else None
+        self._default_connection_id = (
+            default_connection_id.strip() if default_connection_id else None
+        )
+        self._include_error_detail = include_error_detail
         self._http = httpx.Client(
             base_url=self._base_url,
             headers={"Authorization": f"Bearer {self._api_key}"},
@@ -434,6 +455,9 @@ class HebrahClient:
         resolved = self._resolve_connection_id(connection_id)
         return {"connection_id": resolved} if resolved else None
 
+    def _error_detail(self, raw: str | None) -> str | None:
+        return raw if self._include_error_detail else None
+
     def close(self) -> None:
         self._http.close()
 
@@ -446,6 +470,8 @@ class HebrahClient:
     def health(self) -> dict[str, str]:
         try:
             response = httpx.get(f"{self._base_url}/health", timeout=30.0)
+        except httpx.TimeoutException as exc:
+            raise HebrahApiError("Health check timed out", 504) from exc
         except httpx.RequestError as exc:
             raise HebrahApiError(
                 f"Control plane unreachable at {self._base_url}. Is hebrah-api running?",
@@ -455,7 +481,7 @@ class HebrahClient:
             raise HebrahApiError(
                 f"Health check failed ({response.status_code})",
                 response.status_code,
-                response.text,
+                self._error_detail(response.text),
             )
         return response.json()
 
@@ -469,6 +495,8 @@ class HebrahClient:
     ) -> Any:
         try:
             response = self._http.request(method, path, params=params, json=json)
+        except httpx.TimeoutException as exc:
+            raise HebrahApiError("Control plane request timed out", 504) from exc
         except httpx.RequestError as exc:
             raise HebrahApiError(
                 f"Control plane unreachable at {self._base_url}. Is hebrah-api running?",
@@ -479,7 +507,7 @@ class HebrahClient:
             raise HebrahApiError(
                 f"Control plane request failed ({response.status_code})",
                 response.status_code,
-                response.text,
+                self._error_detail(response.text),
             )
 
         if not response.content:

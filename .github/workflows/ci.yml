@@ -20,6 +20,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
+      - run: pip install pip-audit
+      - run: pip-audit --strict
       - run: ruff check src tests
       - run: pytest
 
@@ -37,4 +39,12 @@ jobs:
           python-version: '3.12'
       - run: pip install build twine
       - run: python -m build
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish with PyPI token
+        if: ${{ vars.PUBLISH_WITH_PYPI_TOKEN == 'true' }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
+      - name: Publish with OIDC
+        if: ${{ vars.PUBLISH_WITH_PYPI_TOKEN != 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
