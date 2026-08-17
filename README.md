@@ -122,14 +122,6 @@ See [SECURITY.md](./SECURITY.md) for supported versions and vulnerability report
 
 Full integrator reference: [hebrah-app `/docs/sdk`](https://app.hebrah.com/docs/sdk).
 
-## Examples
-
-Runnable Python snippets live in [`examples/`](./examples):
-
-- [`catalog.py`](./examples/catalog.py) — fetch the sandbox catalog
-- [`verify_webhook.py`](./examples/verify_webhook.py) — verify an `X-Hebrah-Signature`
-- [`trigger_mock_event.py`](./examples/trigger_mock_event.py) — fire a mock event
-
 ## License
 
 MIT
