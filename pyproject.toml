@@ -5,11 +5,28 @@ build-backend = "hatchling.build"
 [project]
 name = "hebrah"
 version = "0.8.1"
-description = "Official Python SDK for the hebrah control plane API"
+description = "Official Python SDK for the Hebrah healthcare connectivity platform — FHIR, HL7 v2, sandbox provisioning, and webhook delivery"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-keywords = ["hebrah", "healthcare", "fhir", "webhooks", "sdk"]
+keywords = [
+  "hebrah",
+  "healthcare",
+  "fhir",
+  "fhir-client",
+  "hl7",
+  "hl7v2",
+  "ehr",
+  "emr",
+  "sandbox",
+  "webhooks",
+  "api-client",
+  "medical-api",
+  "healthcare-api",
+  "sdk",
+  "python-sdk",
+  "hipaa",
+]
 authors = [{ name = "hebrah" }]
 classifiers = [
   "Development Status :: 4 - Beta",
