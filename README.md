@@ -1,5 +1,12 @@
 # hebrah
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/hebrah.svg)](https://pypi.org/project/hebrah/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/hebrah.svg)](https://pypi.org/project/hebrah/)
+[![Python ≥3.10](https://img.shields.io/badge/python-%3E%3D3.10-3776AB?logo=python&logoColor=white)](./pyproject.toml)
+[![GitHub stars](https://img.shields.io/github/stars/Hebrah-inc/hebrah-sdk-python.svg?style=social)](https://github.com/Hebrah-inc/hebrah-sdk-python)
+[![GitHub issues](https://img.shields.io/github/issues/Hebrah-inc/hebrah-sdk-python.svg)](https://github.com/Hebrah-inc/hebrah-sdk-python/issues)
+
 Official Python SDK for the [hebrah](https://hebrah.com) control plane API (hebrah-api).
 
 ## Install
