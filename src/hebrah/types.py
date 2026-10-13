@@ -93,6 +93,85 @@ class WebhookEventEnvelope(TypedDict, total=False):
     latency_ms: int
 
 
+class CreateEnvironmentParams(TypedDict, total=False):
+    name: str
+    clinic_type: str
+    patient_cohort: str
+    patient_count: int
+    bed_count: int
+    addons: list[str]
+
+
+class EnvironmentSummary(TypedDict, total=False):
+    id: str
+    org_id: str
+    name: str
+    clinic_type: str
+    patient_cohort: str
+    status: str
+    addons: list[str]
+    patient_count: int
+    bed_count: int
+    endpoints: dict[str, str]
+    wireguard_ip: str | None
+    queries_run: int
+    bytes_egressed: int
+    hourly_rate_cents: int
+    total_cost_cents: int
+    connected_agents_count: int
+    last_active_at: str | None
+    created_at: str
+
+
+class EnvironmentDetail(EnvironmentSummary, total=False):
+    connection_instructions: dict[str, Any]
+    database_modules: list[dict[str, Any]]
+    connected_agents: list[dict[str, Any]]
+
+
+class DbQueryParams(TypedDict, total=False):
+    sql: str
+    addon: str
+    actor_type: str
+    environment_id: str
+
+
+class DbQueryResponse(TypedDict):
+    rows: list[dict[str, Any]]
+    row_count: int
+    bytes_egressed: int
+    duration_ms: float | int
+    sql_executed: str
+
+
+class WireguardConfigResponse(TypedDict):
+    filename: str
+    client_ip: str
+    config: str
+    instructions: str
+
+
+class TriggerClinicScenarioResponse(TypedDict):
+    success: bool
+    scenario: str
+    patient_id: str
+    hl7_event: str
+    broadcasted: bool
+
+
+class EnvironmentLogItem(TypedDict, total=False):
+    id: str
+    environment_id: str
+    actor_type: str
+    actor_id: str
+    event_type: str
+    summary: str
+    details: dict[str, Any]
+    duration_ms: float | int | None
+    status: str
+    created_at: str
+
+
 LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]"})
 
 

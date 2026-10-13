@@ -252,3 +252,67 @@ def test_verify_webhook_wrong_length_signature():
 
     with pytest.raises(ValueError, match="Invalid webhook signature"):
         verify_webhook_signature(raw, truncated, secret)
+
+
+@respx.mock
+def test_environments_list_calls_endpoint():
+    respx.get(f"{BASE}/v1/environments").mock(
+        return_value=httpx.Response(200, json=[{"id": "env-1", "name": "St. Jude Clinic"}])
+    )
+
+    with HebrahClient(api_key="hb_test_key", base_url=BASE) as client:
+        envs = client.environments.list()
+
+    assert len(envs) == 1
+    assert envs[0]["name"] == "St. Jude Clinic"
+    assert respx.calls[0].request.headers["Authorization"] == "Bearer hb_test_key"
+
+
+@respx.mock
+def test_environments_create_posts_json():
+    respx.post(f"{BASE}/v1/environments").mock(
+        return_value=httpx.Response(201, json={"id": "env-new", "name": "Pediatric Clinic", "status": "active"})
+    )
+
+    with HebrahClient(api_key="hb_test_key", base_url=BASE) as client:
+        created = client.environments.create(
+            name="Pediatric Clinic",
+            patient_cohort="pediatric",
+            addons=["postgres", "vector_qdrant"],
+        )
+
+    assert created["id"] == "env-new"
+    call = respx.calls[0]
+    assert call.request.url.path == "/v1/environments"
+    payload = json.loads(call.request.content)
+    assert payload["name"] == "Pediatric Clinic"
+    assert payload["patient_cohort"] == "pediatric"
+
+
+@respx.mock
+def test_db_query_executes_credential_blind_query():
+    respx.post(f"{BASE}/v1/environments/env-123/db/query").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "rows": [{"id": "pat-01", "first_name": "James"}],
+                "row_count": 1,
+                "bytes_egressed": 65,
+                "duration_ms": 2.5,
+                "sql_executed": "SELECT * FROM patients",
+            },
+        )
+    )
+
+    with HebrahClient(api_key="hb_test_key", base_url=BASE, environment_id="env-123") as client:
+        result = client.db.query("SELECT * FROM patients")
+
+    assert result["row_count"] == 1
+    assert result["rows"][0]["first_name"] == "James"
+    call = respx.calls[0]
+    assert call.request.url.path == "/v1/environments/env-123/db/query"
+    payload = json.loads(call.request.content)
+    assert payload["sql"] == "SELECT * FROM patients"
+    assert payload["addon"] == "postgres"
+    assert payload["actor_type"] == "agent"
+
