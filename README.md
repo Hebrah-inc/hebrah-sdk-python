@@ -7,7 +7,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/Hebrah-inc/hebrah-sdk-python.svg?style=social)](https://github.com/Hebrah-inc/hebrah-sdk-python)
 [![GitHub issues](https://img.shields.io/github/issues/Hebrah-inc/hebrah-sdk-python.svg)](https://github.com/Hebrah-inc/hebrah-sdk-python/issues)
 
-Official Python SDK for the [hebrah](https://hebrah.com) control plane API (hebrah-api).
+Official Python SDK for the [hebrah](https://hebrah.com) Isolated Health Environments & Connectivity Control Plane (`hebrah-api`).
 
 ## Install
 
@@ -17,27 +17,34 @@ pip install hebrah
 
 Requires **Python 3.10+**.
 
-## Quick start
+## Quick start (Isolated Health Environments)
+
+`HebrahClient` automatically resolves `HEBRAH_API_KEY`, `HEBRAH_ENVIRONMENT_ID`, `HEBRAH_CONNECTION_ID`, and `HEBRAH_API_BASE_URL` from environment variables when omitted.
 
 ```python
-import os
-from hebrah import HebrahClient, verify_webhook_signature
+from hebrah import HebrahClient
 
-with HebrahClient(
-    api_key=os.environ["HEBRAH_API_KEY"],
-    default_connection_id=os.environ.get("HEBRAH_CONNECTION_ID"),
-) as client:
-    catalog = client.sandbox.catalog()
-    patient_id = catalog["sample_patient_ids"][0]
-    patient = client.sandbox.resource("Patient", patient_id)
+# Automatically reads HEBRAH_API_KEY and HEBRAH_ENVIRONMENT_ID from os.environ
+with HebrahClient() as client:
+    # 1. Inspect attached database module schema (PostgreSQL 16, SQLite, etc.)
+    schema = client.db.schema()
 
-    client.webhooks.trigger_mock_event(
-        event="patient.admitted",
-        patient_id=patient_id,
+    # 2. Execute a credential-blind parameterized SQL query
+    result = client.db.query(
+        "SELECT id, first_name, last_name, mrn FROM patients WHERE status = $1 LIMIT 10",
+        params=["active"],
     )
-```
+    print(f"Returned {result['row_count']} rows:")
+    for row in result["rows"]:
+        print(row)
 
-> **v0.8:** `default_connection_id` is applied when sandbox methods omit `connection_id`. `client.patients.list()` / `get()` emit `DeprecationWarning` — use `sandbox.list_synthetic_resources("Patient")` instead.
+    # 3. Read FHIR R4 resources directly using your API key or SMART token
+    bundle = client.fhir.search("Patient", {"_count": 5})
+
+    # 4. Inspect environment EHR summary & hash-chained audit logs
+    ehr = client.environments.get_ehr_summary()
+    logs = client.environments.logs(limit=20)
+```
 
 ### Webhook verification
 
@@ -55,19 +62,74 @@ payload = verify_webhook_signature(
 
 - Store `HEBRAH_API_KEY` and `HEBRAH_WEBHOOK_SECRET` in server-side environment variables or a secrets manager only — never expose them to browsers or commit `.env` files.
 - The SDK does not persist credentials; they live in memory for the lifetime of each `HebrahClient` instance.
-- `base_url` must be `https://` in production, or `http://localhost` / `http://127.0.0.1` for local dev — other `http://` hosts are rejected at construction to reduce API-key exfiltration risk.
+- `base_url` (and `HebrahAgentHarness` endpoints) must use `https://` in production, or `http://localhost` / `http://127.0.0.1` for local dev — other `http://` hosts are rejected at construction to prevent API-key exfiltration.
+- All dynamic URL path segments are validated against path-traversal sequences (`.`, `..`, control characters) and percent-encoded.
 - Treat `HebrahApiError.detail` as operator-only diagnostics. Do not log or return it to end users — it may contain internal paths or sensitive API error payloads. Set `include_error_detail=False` on `HebrahClient` to omit `detail` from errors.
 
 See [SECURITY.md](./SECURITY.md) for supported versions and vulnerability reporting.
 
-## API surface (v0.8)
+## API surface (v0.9)
 
-### Sandbox & resources
+### Isolated Health Environments (`client.environments`)
+
+| Method | Description |
+|--------|-------------|
+| `client.environments.list()` | `GET /v1/environments` — list isolated clinic environments |
+| `client.environments.create(...)` | `POST /v1/environments` — provision a new clinic environment |
+| `client.environments.get(environment_id=None)` | `GET /v1/environments/{id}` — defaults to `environment_id` |
+| `client.environments.update_status(environment_id, status)` | `PATCH /v1/environments/{id}/status` (`active`, `paused`, `archived`) |
+| `client.environments.get_ehr_summary(environment_id=None)` | `GET /v1/environments/{id}/ehr/summary` |
+| `client.environments.add_module(...)` | `POST /v1/environments/{id}/modules` (`postgres`, `sqlite`, `vector_qdrant`, `graph_neo4j`) |
+| `client.environments.remove_module(...)` | `DELETE /v1/environments/{id}/modules/{type}` |
+| `client.environments.get_vpn_config(environment_id=None)` | `GET /v1/environments/{id}/vpn/config` — WireGuard `.conf` tunnel |
+| `client.environments.logs(environment_id=None, *, limit=None, actor_type=None)` | `GET /v1/environments/{id}/logs` — hash-chained audit logs |
+
+### Credential-Blind Database Queries (`client.db`)
+
+| Method | Description |
+|--------|-------------|
+| `client.db.query(sql, *, params=None, addon="postgres", actor_type="agent", environment_id=None)` | `POST /v1/environments/{id}/db/query` |
+| `client.db.schema(environment_id=None, *, addon=None)` | `GET /v1/environments/{id}/db/schema` |
+| `client.db.tables(environment_id=None, *, addon=None)` | Returns `list[DbTableSchema]` for the environment database |
+
+### FHIR R4 & SMART on FHIR (`client.fhir`, `client.smart`)
+
+| Method | Description |
+|--------|-------------|
+| `client.fhir.metadata(access_token=None)` | `GET /fhir/R4/metadata` — FHIR CapabilityStatement |
+| `client.fhir.read(resource_type, resource_id, access_token=None)` | `GET /fhir/R4/{type}/{id}` (uses API key or SMART token) |
+| `client.fhir.search(resource_type, params=None, access_token=None)` | `GET /fhir/R4/{type}` — FHIR search bundle |
+| `client.fhir.read_patient(patient_id, access_token=None)` | `GET /fhir/R4/Patient/{id}` |
+| `client.smart.launch(...)` | `POST /v1/smart/launch` |
+| `client.smart.register_client(...)` | `POST /v1/smart/clients` |
+| `client.smart.exchange_token(...)` | `POST /oauth/token` (form-encoded; no API key) |
+
+### Scoped Connections & Audit (`client.connections`)
+
+| Method | Description |
+|--------|-------------|
+| `client.connections.targets(include_all=False)` | `GET /v1/connections/targets` — list connector pack targets |
+| `client.connections.list()` | `GET /v1/connections` — list scoped connections |
+| `client.connections.get(connection_id=None)` | `GET /v1/connections/{id}` |
+| `client.connections.create(target_id, scopes=None, mode=None, display_name=None, credentials=None)` | `POST /v1/connections` |
+| `client.connections.execute(operation, params=None, *, connection_id=None)` | `POST /v1/connections/{id}/execute` |
+| `client.connections.audit_verify(connection_id=None)` | `GET /v1/connections/{id}/audit/verify` — verify SHA-256 hash chain |
+| `client.connections.revoke(connection_id=None)` | `POST /v1/connections/{id}/revoke` |
+
+### Agent Wallet & Metering (`client.agent`)
+
+| Method | Description |
+|--------|-------------|
+| `client.agent.wallet()` | `GET /v1/agent/wallet` — credit balance & trial status |
+| `client.agent.usage()` | `GET /v1/agent/usage` — metered queries & egress usage |
+| `client.agent.ledger(limit=None)` | `GET /v1/agent/ledger` — credit/debit ledger entries |
+
+### Sandbox, HL7 & Webhooks (`client.sandbox`, `client.webhooks`)
 
 | Method | Description |
 |--------|-------------|
 | `client.health()` | `GET /health` (no API key on separate httpx call) |
-| `client.sandbox.catalog(connection_id=None)` | `GET /v1/sandbox/catalog` — uses `default_connection_id` when omitted |
+| `client.sandbox.catalog(connection_id=None)` | `GET /v1/sandbox/catalog` |
 | `client.sandbox.domains()` | `GET /v1/sandbox/domains` |
 | `client.sandbox.domain(domain_id)` | `GET /v1/sandbox/domains/{id}` |
 | `client.sandbox.list_synthetic_resources(resource_type, connection_id=None)` | `GET /v1/sandbox/resources/{type}` |
@@ -77,45 +139,21 @@ See [SECURITY.md](./SECURITY.md) for supported versions and vulnerability report
 | `client.sandbox.list_ehr_models()` | `GET /v1/sandbox/ehr-models` |
 | `client.sandbox.reset_synthetic_ehr(connection_id=...)` | `POST /v1/sandbox/synthetic-ehr/reset` |
 | `client.sandbox.payer_rules(payer_id)` | `GET /v1/sandbox/payer-rules/{id}` |
-| `client.patients.list(connection_id=None)` | **Deprecated** — `GET /v1/patients` |
-| `client.patients.get(id, connection_id=None)` | **Deprecated** — `GET /v1/patients/{id}` |
-
-### HL7, webhooks, interop
-
-| Method | Description |
-|--------|-------------|
 | `client.sandbox.hl7_templates()` | `GET /v1/sandbox/hl7/templates` |
 | `client.sandbox.inject_hl7(...)` | `POST /v1/sandbox/hl7/inject` |
-| `client.sandbox.configure_webhook_reliability(**profile)` | `PATCH /v1/sandbox/webhook-reliability` |
-| `client.sandbox.run_webhook_reliability_scenario(scenario_id, ...)` | `POST /v1/sandbox/scenarios/{id}/run` (alias) |
-| `client.sandbox.run_mpi_match(...)` | `POST /v1/sandbox/mpi/match` |
-| `client.sandbox.run_aggregator_query(...)` | `POST /v1/sandbox/aggregator/query` |
-| `client.sandbox.get_practitioner_credentialing(practitioner_id)` | `GET /v1/sandbox/credentialing/practitioners/{id}` |
 | `client.webhooks.trigger_mock_event(...)` | `POST /v1/webhooks/trigger-mock-event` |
 | `client.webhooks.list_deliveries(...)` | `GET /v1/webhooks/deliveries` |
 | `client.webhooks.replay_delivery(delivery_id)` | `POST /v1/webhooks/deliveries/{id}/replay` |
 | `verify_webhook_signature(raw_body, signature, secret)` | Local HMAC-SHA256 verify |
 
-### SMART & FHIR
-
-| Method | Description |
-|--------|-------------|
-| `client.smart.launch(...)` | `POST /v1/smart/launch` |
-| `client.smart.register_client(...)` | `POST /v1/smart/clients` |
-| `client.smart.exchange_token(...)` | `POST /oauth/token` (form-encoded; no API key) |
-| `client.fhir.read_patient(patient_id, access_token)` | `GET /fhir/R4/Patient/{id}` (SMART access token) |
-
-### Advanced: BYOM agent harness
-
-`HebrahAgentHarness` is exported for bring-your-own-model EHR workflows (MCP + integration-agent). It is **not** part of the core integrator quick start — harness improvements are tracked separately from the core client.
-
 ## Configuration
 
 | Variable | Description |
 |----------|-------------|
-| `HEBRAH_API_KEY` | Pass to `HebrahClient(api_key=...)` |
+| `HEBRAH_API_KEY` | Automatic fallback when `api_key` is omitted on `HebrahClient()` |
+| `HEBRAH_ENVIRONMENT_ID` | Automatic fallback for `environment_id` on `HebrahClient()` |
+| `HEBRAH_CONNECTION_ID` | Automatic fallback for `default_connection_id` on `HebrahClient()` |
 | `HEBRAH_API_BASE_URL` | Optional; default `https://api.hebrah.com` |
-| `HEBRAH_CONNECTION_ID` | Optional; pass to `default_connection_id` for sandbox reads |
 | `HEBRAH_WEBHOOK_SECRET` | For `verify_webhook_signature` |
 
 ## Docs

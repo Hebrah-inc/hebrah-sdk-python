@@ -5,6 +5,8 @@ from typing import Any
 
 import httpx
 
+from hebrah.types import assert_safe_base_url, assert_safe_token, safe_path_segment
+
 
 class HebrahAgentHarness:
     """Thin orchestration layer: MCP tools + integration-agent for BYOM EHR modeling."""
@@ -12,13 +14,31 @@ class HebrahAgentHarness:
     def __init__(
         self,
         *,
-        mcp_url: str,
         pat: str,
+        mcp_url: str = "http://localhost:3021",
         integration_agent_url: str = "http://localhost:3050",
+        dashboard_url: str = "http://localhost:3000",
+        include_error_detail: bool = True,
     ) -> None:
-        self.mcp_url = mcp_url.rstrip("/")
-        self.pat = pat
-        self.integration_agent_url = integration_agent_url.rstrip("/")
+        self.pat = assert_safe_token(pat, "pat")
+        cleaned_mcp = (mcp_url or "").strip().rstrip("/")
+        assert_safe_base_url(cleaned_mcp)
+        self.mcp_url = cleaned_mcp
+
+        cleaned_agent = (integration_agent_url or "").strip().rstrip("/")
+        assert_safe_base_url(cleaned_agent)
+        self.integration_agent_url = cleaned_agent
+
+        cleaned_dashboard = (dashboard_url or "").strip().rstrip("/")
+        assert_safe_base_url(cleaned_dashboard)
+        self.dashboard_url = cleaned_dashboard
+        self.include_error_detail = include_error_detail
+
+    def __enter__(self) -> HebrahAgentHarness:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
 
     def _mcp_call(self, tool: str, args: dict[str, Any] | None = None) -> Any:
         payload = {
@@ -108,10 +128,13 @@ class HebrahAgentHarness:
         dashboard_url: str = "http://localhost:3000",
         confirm_token: str | None = None,
     ) -> Any:
-        token = confirm_token or f"confirm_{connection_id}"
+        cleaned_dashboard = (dashboard_url or "").strip().rstrip("/")
+        assert_safe_base_url(cleaned_dashboard)
+        encoded_conn = safe_path_segment(connection_id, "connection_id")
+        token = confirm_token or f"confirm_{connection_id.strip()}"
         with httpx.Client(timeout=60.0) as client:
             res = client.post(
-                f"{dashboard_url.rstrip('/')}/api/connections/{connection_id}/byom/apply",
+                f"{cleaned_dashboard}/api/connections/{encoded_conn}/byom/apply",
                 headers={
                     "Authorization": f"Bearer {self.pat}",
                     "Content-Type": "application/json",
@@ -119,7 +142,9 @@ class HebrahAgentHarness:
                 json={"modelPack": model_pack, "confirmToken": token},
             )
             if not res.is_success:
-                raise RuntimeError(
-                    f"BYOM apply failed ({res.status_code}): {res.text}"
-                )
+                if self.include_error_detail:
+                    raise RuntimeError(
+                        f"BYOM apply failed ({res.status_code}): {res.text}"
+                    )
+                raise RuntimeError(f"BYOM apply failed ({res.status_code})")
             return res.json()

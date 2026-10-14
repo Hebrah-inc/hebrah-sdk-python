@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import warnings
 from typing import Any
 
@@ -7,20 +8,34 @@ import httpx
 
 from hebrah.errors import HebrahApiError
 from hebrah.types import (
+    AgentLedgerResponse,
+    AgentUsageSummary,
+    AgentWalletSummary,
+    AuditVerifyResponse,
+    ConnectionListResponse,
+    ConnectionTargetsResponse,
     DbQueryResponse,
+    DbSchemaResponse,
+    DbTableSchema,
+    EhrSummaryResponse,
     EnvironmentDetail,
     EnvironmentLogItem,
     EnvironmentSummary,
+    ExecuteOperationResponse,
     PatientListResponse,
     PayerRules,
+    RevokeConnectionResponse,
     RunScenarioResponse,
     SandboxCatalog,
     SandboxDomainSummary,
     SandboxResourceListResponse,
+    ScopedConnection,
     TriggerClinicScenarioResponse,
     TriggerMockEventResponse,
     WireguardConfigResponse,
+    assert_safe_token,
     resolve_base_url,
+    safe_path_segment,
 )
 
 
@@ -32,10 +47,11 @@ class _EnvironmentsResource:
         return self._client._request("GET", "/v1/environments")
 
     def get(self, environment_id: str | None = None) -> EnvironmentDetail:
-        from urllib.parse import quote
-
-        env_id = self._client._resolve_environment_id(environment_id)
-        return self._client._request("GET", f"/v1/environments/{quote(env_id, safe='')}")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request("GET", f"/v1/environments/{env_id}")
 
     def create(
         self,
@@ -58,65 +74,104 @@ class _EnvironmentsResource:
         return self._client._request("POST", "/v1/environments", json=body)
 
     def pause(self, environment_id: str | None = None) -> EnvironmentSummary:
-        from urllib.parse import quote
-
-        env_id = self._client._resolve_environment_id(environment_id)
-        return self._client._request("POST", f"/v1/environments/{quote(env_id, safe='')}/pause")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request("POST", f"/v1/environments/{env_id}/pause")
 
     def resume(self, environment_id: str | None = None) -> EnvironmentSummary:
-        from urllib.parse import quote
-
-        env_id = self._client._resolve_environment_id(environment_id)
-        return self._client._request("POST", f"/v1/environments/{quote(env_id, safe='')}/resume")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request("POST", f"/v1/environments/{env_id}/resume")
 
     def destroy(self, environment_id: str | None = None) -> dict[str, Any]:
-        from urllib.parse import quote
-
-        env_id = self._client._resolve_environment_id(environment_id)
-        return self._client._request("DELETE", f"/v1/environments/{quote(env_id, safe='')}")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request("DELETE", f"/v1/environments/{env_id}")
 
     def add_module(
         self,
-        environment_id: str,
-        module_type: str,
+        environment_id_or_module_type: str,
+        module_type: str | None = None,
         *,
+        environment_id: str | None = None,
         config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        from urllib.parse import quote
+        if module_type is not None:
+            resolved_env = environment_id_or_module_type
+            resolved_module_type = module_type
+        else:
+            resolved_env = self._client._resolve_environment_id(environment_id)
+            resolved_module_type = environment_id_or_module_type
 
+        env_id = safe_path_segment(resolved_env, "environment_id")
         return self._client._request(
             "POST",
-            f"/v1/environments/{quote(environment_id, safe='')}/modules",
-            json={"module_type": module_type, "config": config or {}},
+            f"/v1/environments/{env_id}/modules",
+            json={"module_type": resolved_module_type, "config": config or {}},
         )
 
-    def remove_module(self, environment_id: str, module_id: str) -> dict[str, Any]:
-        from urllib.parse import quote
+    def remove_module(
+        self,
+        environment_id_or_module_id: str,
+        module_id: str | None = None,
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        if module_id is not None:
+            resolved_env = environment_id_or_module_id
+            resolved_module_id = module_id
+        else:
+            resolved_env = self._client._resolve_environment_id(environment_id)
+            resolved_module_id = environment_id_or_module_id
 
+        env_id = safe_path_segment(resolved_env, "environment_id")
+        mod_id = safe_path_segment(resolved_module_id, "module_id")
         return self._client._request(
             "DELETE",
-            f"/v1/environments/{quote(environment_id, safe='')}/modules/{quote(module_id, safe='')}",
+            f"/v1/environments/{env_id}/modules/{mod_id}",
         )
 
     def wireguard_config(self, environment_id: str | None = None) -> WireguardConfigResponse:
-        from urllib.parse import quote
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request("GET", f"/v1/environments/{env_id}/wireguard/config")
 
-        env_id = self._client._resolve_environment_id(environment_id)
-        return self._client._request("GET", f"/v1/environments/{quote(env_id, safe='')}/wireguard/config")
+    def get_ehr_summary(self, environment_id: str | None = None) -> EhrSummaryResponse:
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request("GET", f"/v1/environments/{env_id}/ehr/summary")
 
     def list_patients(self, environment_id: str | None = None) -> list[dict[str, Any]]:
-        from urllib.parse import quote
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request("GET", f"/v1/environments/{env_id}/ehr/patients")
 
-        env_id = self._client._resolve_environment_id(environment_id)
-        return self._client._request("GET", f"/v1/environments/{quote(env_id, safe='')}/ehr/patients")
-
-    def get_patient_chart(self, patient_id: str, *, environment_id: str | None = None) -> dict[str, Any]:
-        from urllib.parse import quote
-
-        env_id = self._client._resolve_environment_id(environment_id)
+    def get_patient_chart(
+        self,
+        patient_id: str,
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        pat_id = safe_path_segment(patient_id, "patient_id")
         return self._client._request(
             "GET",
-            f"/v1/environments/{quote(env_id, safe='')}/ehr/patients/{quote(patient_id, safe='')}",
+            f"/v1/environments/{env_id}/ehr/patients/{pat_id}",
         )
 
     def trigger_scenario(
@@ -127,9 +182,10 @@ class _EnvironmentsResource:
         patient_id: str | None = None,
         notes: str | None = None,
     ) -> TriggerClinicScenarioResponse:
-        from urllib.parse import quote
-
-        env_id = self._client._resolve_environment_id(environment_id)
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
         body: dict[str, Any] = {"scenario": scenario}
         if patient_id:
             body["patient_id"] = patient_id
@@ -137,15 +193,31 @@ class _EnvironmentsResource:
             body["notes"] = notes
         return self._client._request(
             "POST",
-            f"/v1/environments/{quote(env_id, safe='')}/ehr/scenarios/trigger",
+            f"/v1/environments/{env_id}/ehr/scenarios/trigger",
             json=body,
         )
 
-    def logs(self, environment_id: str | None = None) -> list[EnvironmentLogItem]:
-        from urllib.parse import quote
-
-        env_id = self._client._resolve_environment_id(environment_id)
-        return self._client._request("GET", f"/v1/environments/{quote(env_id, safe='')}/logs")
+    def logs(
+        self,
+        environment_id: str | None = None,
+        *,
+        limit: int | None = None,
+        actor_type: str | None = None,
+    ) -> list[EnvironmentLogItem]:
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        params: dict[str, str] = {}
+        if limit is not None:
+            params["limit"] = str(limit)
+        if actor_type:
+            params["actor_type"] = actor_type
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/logs",
+            params=params or None,
+        )
 
 
 class _DbResource:
@@ -159,15 +231,183 @@ class _DbResource:
         addon: str = "postgres",
         actor_type: str = "agent",
         environment_id: str | None = None,
+        params: list[Any] | None = None,
     ) -> DbQueryResponse:
-        from urllib.parse import quote
-
-        env_id = self._client._resolve_environment_id(environment_id)
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        body: dict[str, Any] = {
+            "sql": sql,
+            "addon": addon,
+            "actor_type": actor_type,
+        }
+        if params is not None:
+            body["params"] = params
         return self._client._request(
             "POST",
-            f"/v1/environments/{quote(env_id, safe='')}/db/query",
-            json={"sql": sql, "addon": addon, "actor_type": actor_type},
+            f"/v1/environments/{env_id}/db/query",
+            json=body,
         )
+
+    def schema(
+        self,
+        environment_id: str | None = None,
+        *,
+        addon: str | None = None,
+    ) -> DbSchemaResponse:
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        params = {"addon": addon} if addon else None
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/db/schema",
+            params=params,
+        )
+
+    def tables(
+        self,
+        environment_id: str | None = None,
+        *,
+        addon: str = "postgres",
+    ) -> list[DbTableSchema]:
+        res = self.schema(environment_id=environment_id, addon=addon)
+        return res.get("tables", []) if isinstance(res, dict) else []
+
+
+class _ConnectionsResource:
+    def __init__(self, client: HebrahClient) -> None:
+        self._client = client
+
+    def _require_connection_id(self, connection_id: str | None) -> str:
+        resolved = self._client._resolve_connection_id(connection_id)
+        if not resolved or not resolved.strip():
+            raise ValueError(
+                "connection_id is required (pass as argument or set default_connection_id)"
+            )
+        return safe_path_segment(resolved, "connection_id")
+
+    def targets(
+        self,
+        *,
+        pack_id: str | None = None,
+        mode: str | None = None,
+        include_incubating: bool = False,
+        include_all: bool = False,
+    ) -> ConnectionTargetsResponse:
+        params: dict[str, str] = {}
+        if pack_id:
+            params["pack_id"] = pack_id
+        if mode:
+            params["mode"] = mode
+        if include_incubating:
+            params["include_incubating"] = "true"
+        if include_all:
+            params["include_all"] = "true"
+        return self._client._request(
+            "GET",
+            "/v1/connections/targets",
+            params=params or None,
+        )
+
+    def list(self, *, include_revoked: bool = False) -> ConnectionListResponse:
+        params = {"include_revoked": "true"} if include_revoked else None
+        return self._client._request("GET", "/v1/connections", params=params)
+
+    def get(self, connection_id: str | None = None) -> ScopedConnection:
+        conn_id = self._require_connection_id(connection_id)
+        return self._client._request("GET", f"/v1/connections/{conn_id}")
+
+    def create(
+        self,
+        target: str | None = None,
+        *,
+        target_id: str | None = None,
+        scopes: list[str] | None = None,
+        mode: str = "demo",
+        purpose: str | None = None,
+        display_name: str | None = None,
+        agent_id: str | None = None,
+        credentials: dict[str, Any] | None = None,
+        relay_id: str | None = None,
+    ) -> ScopedConnection:
+        resolved_target = target or target_id
+        if not resolved_target:
+            raise ValueError("target is required")
+        body: dict[str, Any] = {
+            "target": resolved_target,
+            "scopes": scopes or [],
+            "mode": mode,
+        }
+        if purpose is not None:
+            body["purpose"] = purpose
+        elif display_name is not None:
+            body["purpose"] = display_name
+        if agent_id is not None:
+            body["agent_id"] = agent_id
+        if credentials is not None:
+            body["credentials"] = credentials
+        if relay_id is not None:
+            body["relay_id"] = relay_id
+        return self._client._request("POST", "/v1/connections", json=body)
+
+    def execute(
+        self,
+        arg1: str,
+        arg2: dict[str, Any] | None = None,
+        *,
+        operation: str | None = None,
+        params: dict[str, Any] | None = None,
+        connection_id: str | None = None,
+    ) -> ExecuteOperationResponse:
+        if operation is not None:
+            conn_id = self._require_connection_id(arg1)
+            op = operation
+            op_params = params if params is not None else (arg2 or {})
+        else:
+            conn_id = self._require_connection_id(connection_id)
+            op = arg1
+            op_params = arg2 if arg2 is not None else (params or {})
+        return self._client._request(
+            "POST",
+            f"/v1/connections/{conn_id}/execute",
+            json={"operation": op, "params": op_params},
+        )
+
+    def audit_verify(self, connection_id: str | None = None) -> AuditVerifyResponse:
+        conn_id = self._require_connection_id(connection_id)
+        return self._client._request("GET", f"/v1/connections/{conn_id}/audit/verify")
+
+    def revoke(
+        self,
+        connection_id: str | None = None,
+        *,
+        reason: str | None = None,
+    ) -> RevokeConnectionResponse:
+        conn_id = self._require_connection_id(connection_id)
+        params = {"reason": reason} if reason else None
+        return self._client._request(
+            "POST",
+            f"/v1/connections/{conn_id}/revoke",
+            params=params,
+        )
+
+
+class _AgentResource:
+    def __init__(self, client: HebrahClient) -> None:
+        self._client = client
+
+    def wallet(self) -> AgentWalletSummary:
+        return self._client._request("GET", "/v1/agent/wallet")
+
+    def usage(self) -> AgentUsageSummary:
+        return self._client._request("GET", "/v1/agent/usage")
+
+    def ledger(self, limit: int | None = None) -> AgentLedgerResponse:
+        params = {"limit": str(limit)} if limit is not None else None
+        return self._client._request("GET", "/v1/agent/ledger", params=params)
 
 
 class _SandboxResource:
@@ -185,11 +425,10 @@ class _SandboxResource:
         return self._client._request("GET", "/v1/sandbox/domains")
 
     def domain(self, domain_id: str) -> SandboxDomainSummary:
-        from urllib.parse import quote
-
+        dom_id = safe_path_segment(domain_id, "domain_id")
         return self._client._request(
             "GET",
-            f"/v1/sandbox/domains/{quote(domain_id, safe='')}",
+            f"/v1/sandbox/domains/{dom_id}",
         )
 
     def resource(
@@ -199,12 +438,12 @@ class _SandboxResource:
         *,
         patient_id: str | None = None,
     ) -> dict[str, Any]:
-        from urllib.parse import quote
-
+        res_type = safe_path_segment(resource_type, "resource_type")
+        res_id = safe_path_segment(resource_id, "resource_id")
         params = {"patient_id": patient_id} if patient_id else None
         return self._client._request(
             "GET",
-            f"/v1/sandbox/resources/{quote(resource_type, safe='')}/{quote(resource_id, safe='')}",
+            f"/v1/sandbox/resources/{res_type}/{res_id}",
             params=params,
         )
 
@@ -214,12 +453,11 @@ class _SandboxResource:
         *,
         connection_id: str | None = None,
     ) -> SandboxResourceListResponse:
-        from urllib.parse import quote
-
+        res_type = safe_path_segment(resource_type, "resource_type")
         params = self._client._connection_params(connection_id)
         return self._client._request(
             "GET",
-            f"/v1/sandbox/resources/{quote(resource_type, safe='')}",
+            f"/v1/sandbox/resources/{res_type}",
             params=params,
         )
 
@@ -231,8 +469,7 @@ class _SandboxResource:
         connection_id: str | None = None,
         delay_seconds: float | None = None,
     ) -> RunScenarioResponse:
-        from urllib.parse import quote
-
+        scen_id = safe_path_segment(scenario_id, "scenario_id")
         body: dict[str, str | float] = {}
         if patient_id:
             body["patient_id"] = patient_id
@@ -243,16 +480,15 @@ class _SandboxResource:
             body["delay_seconds"] = delay_seconds
         return self._client._request(
             "POST",
-            f"/v1/sandbox/scenarios/{quote(scenario_id, safe='')}/run",
+            f"/v1/sandbox/scenarios/{scen_id}/run",
             json=body,
         )
 
     def payer_rules(self, payer_id: str) -> PayerRules:
-        from urllib.parse import quote
-
+        pid = safe_path_segment(payer_id, "payer_id")
         return self._client._request(
             "GET",
-            f"/v1/sandbox/payer-rules/{quote(payer_id, safe='')}",
+            f"/v1/sandbox/payer-rules/{pid}",
         )
 
     def hl7_templates(self) -> list[dict[str, Any]]:
@@ -341,11 +577,10 @@ class _SandboxResource:
         )
 
     def get_practitioner_credentialing(self, practitioner_id: str) -> dict[str, Any]:
-        from urllib.parse import quote
-
+        prac_id = safe_path_segment(practitioner_id, "practitioner_id")
         return self._client._request(
             "GET",
-            f"/v1/sandbox/credentialing/practitioners/{quote(practitioner_id, safe='')}",
+            f"/v1/sandbox/credentialing/practitioners/{prac_id}",
         )
 
     def synthetic_ehr_profile(self, *, connection_id: str | None = None) -> dict[str, Any]:
@@ -445,32 +680,85 @@ class _FhirResource:
     def __init__(self, client: HebrahClient) -> None:
         self._client = client
 
-    def read_patient(self, patient_id: str, access_token: str) -> dict[str, Any]:
-        from urllib.parse import quote
-
+    def _fhir_get(
+        self,
+        path: str,
+        *,
+        access_token: str | None = None,
+        params: dict[str, str | int | bool] | None = None,
+        error_prefix: str = "FHIR request",
+    ) -> dict[str, Any]:
+        token = (
+            assert_safe_token(access_token, "access_token")
+            if access_token is not None
+            else self._client._api_key
+        )
+        str_params = {k: str(v) for k, v in params.items()} if params else None
         try:
             response = httpx.get(
-                f"{self._client._base_url}/fhir/R4/Patient/{quote(patient_id, safe='')}",
+                f"{self._client._base_url}{path}",
                 headers={
-                    "Authorization": f"Bearer {access_token}",
+                    "Authorization": f"Bearer {token}",
                     "Accept": "application/fhir+json",
                 },
+                params=str_params,
                 timeout=30.0,
             )
         except httpx.TimeoutException as exc:
-            raise HebrahApiError("FHIR Patient read timed out", 504) from exc
+            raise HebrahApiError(f"{error_prefix} timed out", 504) from exc
         except httpx.RequestError as exc:
             raise HebrahApiError(
-                "FHIR Patient read failed: control plane unreachable",
+                f"{error_prefix} failed: control plane unreachable",
                 503,
             ) from exc
         if not response.is_success:
             raise HebrahApiError(
-                f"FHIR Patient read failed ({response.status_code})",
+                f"{error_prefix} failed ({response.status_code})",
                 response.status_code,
                 self._client._error_detail(response.text),
             )
         return response.json()
+
+    def metadata(self) -> dict[str, Any]:
+        return self._fhir_get("/fhir/R4/metadata", error_prefix="FHIR metadata read")
+
+    def read(
+        self,
+        resource_type: str,
+        resource_id: str,
+        *,
+        access_token: str | None = None,
+    ) -> dict[str, Any]:
+        res_type = safe_path_segment(resource_type, "resource_type")
+        res_id = safe_path_segment(resource_id, "resource_id")
+        return self._fhir_get(
+            f"/fhir/R4/{res_type}/{res_id}",
+            access_token=access_token,
+            error_prefix=f"FHIR {res_type} read",
+        )
+
+    def search(
+        self,
+        resource_type: str,
+        params: dict[str, str | int | bool] | None = None,
+        *,
+        access_token: str | None = None,
+    ) -> dict[str, Any]:
+        res_type = safe_path_segment(resource_type, "resource_type")
+        return self._fhir_get(
+            f"/fhir/R4/{res_type}",
+            access_token=access_token,
+            params=params,
+            error_prefix=f"FHIR {res_type} search",
+        )
+
+    def read_patient(self, patient_id: str, access_token: str | None = None) -> dict[str, Any]:
+        pat_id = safe_path_segment(patient_id, "patient_id")
+        return self._fhir_get(
+            f"/fhir/R4/Patient/{pat_id}",
+            access_token=access_token,
+            error_prefix="FHIR Patient read",
+        )
 
 
 class _PatientsResource:
@@ -497,11 +785,10 @@ class _PatientsResource:
             DeprecationWarning,
             stacklevel=2,
         )
-        from urllib.parse import quote
-
+        pat_id = safe_path_segment(patient_id, "patient_id")
         return self._client._request(
             "GET",
-            f"/v1/patients/{quote(patient_id, safe='')}",
+            f"/v1/patients/{pat_id}",
             params=self._client._connection_params(connection_id),
         )
 
@@ -558,36 +845,43 @@ class _WebhooksResource:
         return self._client._request("GET", "/v1/webhooks/deliveries", params=params or None)
 
     def replay_delivery(self, delivery_id: str) -> dict[str, Any]:
-        from urllib.parse import quote
-
+        deliv_id = safe_path_segment(delivery_id, "delivery_id")
         return self._client._request(
             "POST",
-            f"/v1/webhooks/deliveries/{quote(delivery_id, safe='')}/replay",
+            f"/v1/webhooks/deliveries/{deliv_id}/replay",
         )
 
 
 class HebrahClient:
-    """Sync client for the hebrah control plane API."""
+    """Sync client for the hebrah Isolated Health Environments & control plane API."""
 
     def __init__(
         self,
         *,
-        api_key: str,
+        api_key: str | None = None,
         base_url: str | None = None,
         default_connection_id: str | None = None,
         environment_id: str | None = None,
         include_error_detail: bool = True,
     ) -> None:
-        if not api_key or not api_key.strip():
-            raise ValueError("api_key is required")
-        self._api_key = api_key.strip()
+        resolved_key = api_key if api_key is not None else os.environ.get("HEBRAH_API_KEY")
+        self._api_key = assert_safe_token(resolved_key, "api_key")
         self._base_url = resolve_base_url(base_url)
-        self._default_connection_id = (
-            default_connection_id.strip() if default_connection_id else None
+
+        raw_conn = (
+            default_connection_id
+            if default_connection_id is not None
+            else os.environ.get("HEBRAH_CONNECTION_ID")
         )
-        self._environment_id = (
-            environment_id.strip() if environment_id else None
+        self._default_connection_id = raw_conn.strip() if raw_conn and raw_conn.strip() else None
+
+        raw_env = (
+            environment_id
+            if environment_id is not None
+            else os.environ.get("HEBRAH_ENVIRONMENT_ID")
         )
+        self._environment_id = raw_env.strip() if raw_env and raw_env.strip() else None
+
         self._include_error_detail = include_error_detail
         self._http = httpx.Client(
             base_url=self._base_url,
@@ -596,6 +890,8 @@ class HebrahClient:
         )
         self.environments = _EnvironmentsResource(self)
         self.db = _DbResource(self)
+        self.connections = _ConnectionsResource(self)
+        self.agent = _AgentResource(self)
         self.sandbox = _SandboxResource(self)
         self.patients = _PatientsResource(self)
         self.webhooks = _WebhooksResource(self)
@@ -608,11 +904,11 @@ class HebrahClient:
 
     def _resolve_environment_id(self, environment_id: str | None) -> str:
         resolved = environment_id or self._environment_id
-        if not resolved:
+        if not resolved or not resolved.strip():
             raise ValueError(
                 "environment_id is required (pass as argument or set in HebrahClient)"
             )
-        return resolved
+        return resolved.strip()
 
     def _resolve_connection_id(self, connection_id: str | None) -> str | None:
         return connection_id or self._default_connection_id
@@ -657,7 +953,7 @@ class HebrahClient:
         path: str,
         *,
         params: dict[str, str] | None = None,
-        json: dict[str, str | float | bool] | None = None,
+        json: dict[str, Any] | None = None,
     ) -> Any:
         try:
             response = self._http.request(method, path, params=params, json=json)

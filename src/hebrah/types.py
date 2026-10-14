@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from typing import Any, TypedDict
+from urllib.parse import quote, urlparse
 
 DEFAULT_BASE_URL = "https://api.hebrah.com"
 
@@ -134,6 +135,7 @@ class DbQueryParams(TypedDict, total=False):
     addon: str
     actor_type: str
     environment_id: str
+    params: list[Any]
 
 
 class DbQueryResponse(TypedDict):
@@ -142,6 +144,38 @@ class DbQueryResponse(TypedDict):
     bytes_egressed: int
     duration_ms: float | int
     sql_executed: str
+
+
+class DbColumnSchema(TypedDict, total=False):
+    name: str
+    type: str
+    nullable: bool
+    primary_key: bool
+    description: str
+
+
+class DbTableSchema(TypedDict, total=False):
+    table: str
+    name: str
+    row_count: int
+    columns: list[DbColumnSchema]
+
+
+class DbSchemaResponse(TypedDict, total=False):
+    environment_id: str
+    addon: str
+    tables: list[DbTableSchema]
+
+
+class EhrSummaryResponse(TypedDict, total=False):
+    environment_id: str
+    clinic_type: str
+    patient_cohort: str
+    patient_count: int
+    bed_count: int
+    occupied_beds: int
+    active_encounters: int
+    recent_alerts: list[dict[str, Any]]
 
 
 class WireguardConfigResponse(TypedDict):
@@ -172,13 +206,134 @@ class EnvironmentLogItem(TypedDict, total=False):
     created_at: str
 
 
-LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]"})
+class ConnectionTargetSummary(TypedDict, total=False):
+    id: str
+    name: str
+    pack_id: str
+    pack_name: str
+    driver: str
+    mode: str
+    description: str
+    available_scopes: list[str]
+    tables: list[str]
+    incubating: bool
+
+
+class ConnectionTargetsResponse(TypedDict, total=False):
+    targets: list[ConnectionTargetSummary]
+    total: int
+
+
+class ScopedConnection(TypedDict, total=False):
+    connection_id: str
+    id: str
+    org_id: str
+    target: str
+    driver: str
+    mode: str
+    scopes: list[str]
+    status: str
+    purpose: str | None
+    agent_id: str | None
+    relay_id: str | None
+    created_at: str
+    revoked_at: str | None
+
+
+class ConnectionListResponse(TypedDict, total=False):
+    connections: list[ScopedConnection]
+    total: int
+
+
+class ExecuteOperationResponse(TypedDict, total=False):
+    connection_id: str
+    operation: str
+    rows: list[dict[str, Any]]
+    row_count: int
+    result: Any
+    audit_event_hash: str
+    duration_ms: float | int
+
+
+class AuditVerifyResponse(TypedDict, total=False):
+    connection_id: str
+    verified: bool
+    valid: bool
+    event_count: int
+    head_hash: str | None
+    broken_at_index: int | None
+
+
+class RevokeConnectionResponse(TypedDict, total=False):
+    connection_id: str
+    status: str
+    revoked: bool
+    revoked_at: str
+
+
+class AgentWalletSummary(TypedDict, total=False):
+    org_id: str
+    balance_cents: int
+    balance_usd: str
+    currency: str
+    free_queries_remaining: int
+    free_egress_bytes_remaining: int
+    auto_reload_enabled: bool
+    status: str
+
+
+class AgentUsageSummary(TypedDict, total=False):
+    org_id: str
+    queries_run: int
+    bytes_egressed: int
+    active_environments: int
+    active_connections: int
+    total_cost_cents: int
+
+
+class AgentLedgerEntry(TypedDict, total=False):
+    id: str
+    entry_type: str
+    amount_cents: int
+    balance_after_cents: int
+    description: str
+    created_at: str
+
+
+class AgentLedgerResponse(TypedDict, total=False):
+    entries: list[AgentLedgerEntry]
+    total: int
+
+
+LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "[::1]", "::1"})
+
+
+def safe_path_segment(value: str, name: str = "id") -> str:
+    """Validate and URL-encode a single path segment, rejecting empty or traversal segments."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} is required")
+    trimmed = value.strip()
+    if trimmed in (".", ".."):
+        raise ValueError(f"{name} must not contain path-traversal sequences")
+    if "\r" in trimmed or "\n" in trimmed or "\x00" in trimmed:
+        raise ValueError(f"{name} contains invalid control characters")
+    return quote(trimmed, safe="")
+
+
+def assert_safe_token(token: str | None, name: str = "api_key") -> str:
+    """Validate that a bearer token / API key is non-empty and free of HTTP header control chars."""
+    if not token or not isinstance(token, str) or not token.strip():
+        raise ValueError(f"{name} is required")
+    trimmed = token.strip()
+    if "\r" in trimmed or "\n" in trimmed or "\x00" in trimmed:
+        raise ValueError(f"{name} contains invalid control characters")
+    return trimmed
 
 
 def assert_safe_base_url(url: str) -> None:
-    from urllib.parse import urlparse
-
-    parsed = urlparse(url)
+    if not url or not isinstance(url, str) or not url.strip():
+        raise ValueError("Invalid base_url: empty URL")
+    parsed = urlparse(url.strip())
     if not parsed.scheme or not parsed.netloc:
         raise ValueError(f"Invalid base_url: {url}")
 
@@ -195,6 +350,7 @@ def assert_safe_base_url(url: str) -> None:
 
 
 def resolve_base_url(base_url: str | None = None) -> str:
-    url = (base_url or os.environ.get("HEBRAH_API_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
+    raw = base_url or os.environ.get("HEBRAH_API_BASE_URL") or DEFAULT_BASE_URL
+    url = raw.strip().rstrip("/")
     assert_safe_base_url(url)
     return url
