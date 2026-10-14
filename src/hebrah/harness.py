@@ -5,7 +5,13 @@ from typing import Any
 
 import httpx
 
-from hebrah.types import assert_safe_base_url, assert_safe_token, safe_path_segment
+from hebrah.types import (
+    assert_safe_base_url,
+    assert_safe_external_url,
+    assert_safe_token,
+    redact_secrets,
+    safe_path_segment,
+)
 
 
 class HebrahAgentHarness:
@@ -34,6 +40,12 @@ class HebrahAgentHarness:
         self.dashboard_url = cleaned_dashboard
         self.include_error_detail = include_error_detail
 
+    def __repr__(self) -> str:
+        return f"HebrahAgentHarness(mcp_url={self.mcp_url!r}, pat='[REDACTED]')"
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
     def __enter__(self) -> HebrahAgentHarness:
         return self
 
@@ -59,7 +71,8 @@ class HebrahAgentHarness:
             res.raise_for_status()
             body = res.json()
         if body.get("error"):
-            raise RuntimeError(body["error"].get("message", "MCP tool error"))
+            msg = str(body["error"].get("message", "MCP tool error"))
+            raise RuntimeError(redact_secrets(msg))
         content = (body.get("result") or {}).get("content") or []
         if content and content[0].get("text"):
             return json.loads(content[0]["text"])
@@ -88,9 +101,10 @@ class HebrahAgentHarness:
         doc_urls: list[str] | None = None,
         doc_text: str | None = None,
     ) -> Any:
+        validated_urls = [assert_safe_external_url(u, "doc_url") for u in (doc_urls or [])]
         chunk_ids: list[str] = []
         with httpx.Client(timeout=60.0) as client:
-            for url in doc_urls or []:
+            for url in validated_urls:
                 res = client.post(
                     f"{self.integration_agent_url}/v1/ingest",
                     json={"connection_id": connection_id, "url": url},
@@ -144,7 +158,7 @@ class HebrahAgentHarness:
             if not res.is_success:
                 if self.include_error_detail:
                     raise RuntimeError(
-                        f"BYOM apply failed ({res.status_code}): {res.text}"
+                        f"BYOM apply failed ({res.status_code}): {redact_secrets(res.text)}"
                     )
                 raise RuntimeError(f"BYOM apply failed ({res.status_code})")
             return res.json()

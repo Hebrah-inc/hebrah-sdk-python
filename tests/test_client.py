@@ -485,3 +485,44 @@ def test_connections_and_agent_resources():
         ledger = client.agent.ledger(limit=5)
         assert len(ledger["entries"]) == 1
         assert respx.calls[7].request.url.params["limit"] == "5"
+
+
+@respx.mock
+def test_zero_data_leak_repr_ssrf_and_replay_window():
+    with HebrahClient(api_key="hb_live_supersecretkey99999", base_url=BASE) as client:
+        assert "hb_live_supersecretkey99999" not in repr(client)
+        assert "hb_live_supersecretkey99999" not in str(client)
+
+        respx.get(f"{BASE}/v1/environments").mock(
+            return_value=httpx.Response(
+                500,
+                text="db error with token hb_pat_leakedtoken999999 and enc:v1:cipher12345",
+            )
+        )
+        with pytest.raises(HebrahApiError) as exc_info:
+            client.environments.list()
+        assert "hb_pat_leakedtoken999999" not in str(exc_info.value)
+        assert "enc:v1:cipher12345" not in str(exc_info.value)
+        assert "[REDACTED_HEBRAH_TOKEN]" in (exc_info.value.detail or "")
+
+    with HebrahAgentHarness(pat="hb_pat_secret999988887777") as harness:
+        assert "hb_pat_secret999988887777" not in repr(harness)
+        with pytest.raises(ValueError, match="private, loopback, or metadata"):
+            harness.research_and_model_ehr(
+                vendor="Epic",
+                connection_id="conn-1",
+                doc_urls=["http://169.254.169.254/latest/meta-data/"],
+            )
+
+    secret = "hbsec_test"
+    stale_payload = {
+        "event": "patient.admitted",
+        "connection_id": "conn-1",
+        "timestamp": "2026-10-14T11:40:00Z",
+    }
+    raw = json.dumps(stale_payload).encode("utf-8")
+    sig = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+    now_ts = 1791979200.0  # 2026-10-14T12:00:00Z
+    with pytest.raises(ValueError, match="Webhook timestamp outside allowed replay window"):
+        verify_webhook_signature(raw, sig, secret, max_age_seconds=300, now_timestamp=now_ts)
+

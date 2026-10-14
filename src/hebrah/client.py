@@ -34,6 +34,7 @@ from hebrah.types import (
     TriggerMockEventResponse,
     WireguardConfigResponse,
     assert_safe_token,
+    redact_secrets,
     resolve_base_url,
     safe_path_segment,
 )
@@ -918,7 +919,15 @@ class HebrahClient:
         return {"connection_id": resolved} if resolved else None
 
     def _error_detail(self, raw: str | None) -> str | None:
-        return raw if self._include_error_detail else None
+        if not self._include_error_detail or raw is None:
+            return None
+        return redact_secrets(raw)
+
+    def __repr__(self) -> str:
+        return f"HebrahClient(base_url={self._base_url!r}, api_key='[REDACTED]')"
+
+    def __str__(self) -> str:
+        return self.__repr__()
 
     def close(self) -> None:
         self._http.close()
