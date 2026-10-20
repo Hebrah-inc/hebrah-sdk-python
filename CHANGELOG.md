@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-10-19
+
+### Added
+
+- **Full Isolated Health Environments & Clinical Pack Parity**:
+  - `client.environments.consult_architect(...)`, `admit_patients(...)`, `consult_studio(...)`, `list_patients(...)`, `get_patient_chart(...)`, `trigger_scenario(...)`, `connect_agent(...)`, `get_autosave(...)`, `update_autosave(...)`, `tables(...)`, `record_outcome(...)`, `wireguard_config(...)`, and `delete(...)`.
+  - Clinical capability pack namespaces: `client.hl7`, `client.dicom`, `client.x12`, `client.ccda`, `client.smart_cds`, and `client.open_data`.
+  - Database pack helpers: `client.db.vector_search(...)`, `client.db.graph_query(...)`, `client.db.record_outcome(...)`, `client.db.wireguard_config(...)`, and `interpolate_sql_params(...)`.
+
+### Security
+
+- Enforced zero-leak secret redaction (`redact_secrets`) across `HebrahApiError`, client `__repr__`, and `HebrahAgentHarness` error outputs (`hb_live_*`, `hb_test_*`, `hb_pat_*`, `hb_conn_*`, `hb_claim_*`, `enc:v1:*`, WireGuard `PrivateKey`, Bearer/Basic headers).
+- Hardened SSRF & DNS-rebinding defenses (`assert_safe_base_url`, `assert_safe_external_url`) blocking cloud metadata IPv4/IPv6/hex/octal/integer hosts, URL credentials, and query/fragment smuggling.
+- Added timestamp replay window validation (`tolerance_seconds=300`) and strict hex verification to `verify_webhook_signature()`.
+- Hardened `interpolate_sql_params()` to reject `NaN`/`Infinity`, control bytes, and dollar-quoted SQL injection, while skipping placeholders inside single-quoted literals, double-quoted identifiers, dollar-quoted blocks, and SQL comments.
+
 ## [0.9.0] — 2026-10-14
 
 ### Added
