@@ -37,7 +37,8 @@ def main() -> None:
     print(f"org: {catalog['org_name']}")
     print(f"environment: {catalog['environment']}")
     print(f"sample patients: {len(catalog['sample_patient_ids'])} available")
-    print(f"supported events: {len(catalog['supported_events'])} ({', '.join(catalog['supported_events'])})")
+    events_str = ", ".join(catalog["supported_events"])
+    print(f"supported events: {len(catalog['supported_events'])} ({events_str})")
 
 
 if __name__ == "__main__":
