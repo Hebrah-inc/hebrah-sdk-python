@@ -133,6 +133,7 @@ class _EnvironmentsResource:
         clinic_type: str = "general_clinic",
         patient_cohort: str = "geriatric",
         patient_count: int = 25,
+        seed_patients: int | None = None,
         bed_count: int = 40,
         addons: list[str] | None = None,
         archetype: str | None = None,
@@ -143,13 +144,14 @@ class _EnvironmentsResource:
     ) -> EnvironmentSummary:
         if not name or not name.strip():
             raise ValueError("environment name must be a non-empty string")
-        if patient_count < 1 or patient_count > 10_000:
+        resolved_patient_count = seed_patients if seed_patients is not None else patient_count
+        if resolved_patient_count < 1 or resolved_patient_count > 10_000:
             raise ValueError("patient_count must be between 1 and 10000")
         body: dict[str, Any] = {
             "name": name,
             "clinic_type": archetype if archetype is not None else clinic_type,
             "patient_cohort": patient_cohort,
-            "patient_count": patient_count,
+            "patient_count": resolved_patient_count,
             "bed_count": bed_count,
             "addons": (
                 addons
@@ -159,6 +161,8 @@ class _EnvironmentsResource:
         }
         if archetype is not None:
             body["archetype"] = archetype
+        if seed_patients is not None:
+            body["seed_patients"] = seed_patients
         if modules is not None:
             body["modules"] = modules
         if ttl_hours is not None:
@@ -404,24 +408,28 @@ class _EnvironmentsResource:
 
     def consult_studio(
         self,
-        message: str,
+        message: str | None = None,
         *,
+        prompt: str | None = None,
         environment_id: str | None = None,
         session_id: str | None = None,
         history: list[ConsultStudioMessage] | None = None,
         apply_changes: bool = False,
     ) -> ConsultStudioResponse:
         """Interact with the live Environment AI Studio to modify or inspect an environment."""
-        if not message or not isinstance(message, str) or not message.strip():
+        resolved_msg = message if message is not None else prompt
+        if not resolved_msg or not isinstance(resolved_msg, str) or not resolved_msg.strip():
             raise ValueError("message must be a non-empty string")
-        if len(message) > 8000:
+        if len(resolved_msg) > 8000:
             raise ValueError("message must be 8000 characters or fewer")
         env_id = safe_path_segment(
             self._client._resolve_environment_id(environment_id),
             "environment_id",
         )
+        cleaned = resolved_msg.strip()
         body: dict[str, Any] = {
-            "message": message.strip(),
+            "message": cleaned,
+            "prompt": cleaned,
             "apply_changes": apply_changes,
         }
         if session_id:

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-10-20
+
+### Added
+
+- **Agent Ergonomics & Parameter Aliases (`client.environments`)**:
+  - `client.environments.create()` now accepts `seed_patients` alongside `patient_count`.
+  - `client.environments.consult_studio()` now accepts `prompt` alongside `message`.
+
 ## [0.9.1] — 2026-10-19
 
 ### Added
