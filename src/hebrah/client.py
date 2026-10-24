@@ -1578,6 +1578,7 @@ class HebrahClient:
         self._http = httpx.Client(
             base_url=self._base_url,
             timeout=self._timeout,
+            headers={"Accept-Encoding": "gzip, deflate"},
         )
         self.environments = _EnvironmentsResource(self)
         self.db = _DbResource(self)
@@ -1625,7 +1626,10 @@ class HebrahClient:
             body["purpose"] = purpose.strip()
 
         try:
-            with httpx.Client(timeout=valid_timeout) as http:
+            with httpx.Client(
+                timeout=valid_timeout,
+                headers={"Accept-Encoding": "gzip, deflate"},
+            ) as http:
                 response = http.post(
                     f"{resolved_url}/v1/agent/account",
                     json=body,
