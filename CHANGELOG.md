@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] — 2026-10-26
+
+### Added
+
+- **4-Engine Database Read/Write & Live EHR Sync (`client.db`)**:
+  - `client.db.execute()` for scoped DDL/DML writes (`CREATE TABLE`, `INSERT`, `UPDATE`, `DELETE`) across PostgreSQL 16 and SQLite.
+  - `client.db.vector_collections()`, `client.db.vector_create_collection()`, `client.db.vector_upsert()`, `client.db.vector_search()`, and `client.db.vector_delete()` for Qdrant Vector DB.
+  - `client.db.graph_query()`, `client.db.graph_execute()`, and `client.db.graph_schema()` for Neo4j Graph DB.
+  - `client.db.sqlite_download()` and `client.db.sqlite_upload()` for portable SQLite `.sqlite` files.
+- **Pluggable EHR Promotion & Zero-Trust WireGuard Peer Management (`client.environments`)**:
+  - `client.environments.promote_ehr()`, `client.environments.sync_connector()`, `client.environments.register_wireguard_peer()`, `client.environments.list_wireguard_peers()`, and `client.environments.revoke_wireguard_peer()`.
+- **Hosted Two-Stage Personal Concierge (`client.concierge`) & Human Invite (`client.agent.invite_human`)**.
+
 ## [0.9.2] — 2026-10-20
 
 ### Added

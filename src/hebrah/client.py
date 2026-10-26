@@ -252,17 +252,28 @@ class _EnvironmentsResource:
             f"/v1/environments/{env_id}/modules/{mod_id}",
         )
 
-    def wireguard_config(self, environment_id: str | None = None) -> WireguardConfigResponse:
+    def wireguard_config(
+        self,
+        environment_id: str | None = None,
+        *,
+        public_key: str | None = None,
+    ) -> WireguardConfigResponse:
         env_id = safe_path_segment(
             self._client._resolve_environment_id(environment_id),
             "environment_id",
         )
-        return self._client._request("GET", f"/v1/environments/{env_id}/wireguard/config")
+        params = {"public_key": public_key.strip()} if public_key and public_key.strip() else None
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/wireguard/config",
+            params=params,
+        )
 
     def generate_wireguard_config(
         self,
         *,
         peer_name: str = "developer-workstation",
+        public_key: str | None = None,
         environment_id: str | None = None,
     ) -> WireGuardPeerConfigResponse:
         """Generate a WireGuard VPN tunnel config for human GUI database clients."""
@@ -272,10 +283,13 @@ class _EnvironmentsResource:
             self._client._resolve_environment_id(environment_id),
             "environment_id",
         )
+        body: dict[str, Any] = {"peer_name": peer_name.strip()}
+        if public_key and public_key.strip():
+            body["public_key"] = public_key.strip()
         return self._client._request(
             "POST",
             f"/v1/environments/{env_id}/vpn/peers",
-            json={"peer_name": peer_name.strip()},
+            json=body,
         )
 
     def export_vpn_peer(
@@ -283,11 +297,90 @@ class _EnvironmentsResource:
         environment_id: str | None = None,
         *,
         peer_name: str = "developer-workstation",
+        public_key: str | None = None,
     ) -> WireGuardPeerConfigResponse:
         """Alias for generate_wireguard_config."""
         return self.generate_wireguard_config(
             peer_name=peer_name,
+            public_key=public_key,
             environment_id=environment_id,
+        )
+
+    def list_vpn_peers(self, environment_id: str | None = None) -> dict[str, Any]:
+        """List registered WireGuard VPN peers for an environment."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request("GET", f"/v1/environments/{env_id}/vpn/peers")
+
+    def revoke_vpn_peer(
+        self,
+        peer_id: str,
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Revoke a registered WireGuard VPN peer."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        safe_peer = safe_path_segment(peer_id, "peer_id")
+        return self._client._request(
+            "DELETE",
+            f"/v1/environments/{env_id}/vpn/peers/{safe_peer}",
+        )
+
+    def promote_to_connected_ehr(
+        self,
+        connection_id: str,
+        *,
+        baa_acknowledged: bool = False,
+        sync_initial_cohort: bool = True,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Promote an environment from synthetic EHR mode to a connected EHR under BAA."""
+        if not connection_id or not connection_id.strip():
+            raise ValueError("connection_id must be a non-empty string")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/promote-ehr",
+            json={
+                "connection_id": connection_id.strip(),
+                "baa_acknowledged": bool(baa_acknowledged),
+                "sync_initial_cohort": bool(sync_initial_cohort),
+            },
+        )
+
+    def sync_connector(
+        self,
+        connection_id: str,
+        *,
+        tables: list[str] | None = None,
+        max_rows_per_table: int = 50,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Sync data from an external Connector into the environment's attached databases."""
+        if not connection_id or not connection_id.strip():
+            raise ValueError("connection_id must be a non-empty string")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        body: dict[str, Any] = {
+            "connection_id": connection_id.strip(),
+            "max_rows_per_table": max_rows_per_table,
+        }
+        if tables is not None:
+            body["tables"] = tables
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/connectors/sync",
+            json=body,
         )
 
     def get_ehr_summary(self, environment_id: str | None = None) -> EhrSummaryResponse:
@@ -575,6 +668,70 @@ class _DbResource:
             json=body,
         )
 
+    def execute(
+        self,
+        sql: str,
+        *,
+        addon: str = "postgres",
+        actor_type: str = "agent",
+        environment_id: str | None = None,
+        params: Sequence[Any] | None = None,
+        interpolate: bool = False,
+    ) -> dict[str, Any]:
+        """Execute a controlled DML/DDL statement (`INSERT`, `UPDATE`, `DELETE`, `CREATE TABLE`) against Postgres or SQLite."""
+        if interpolate or (params is not None and "?" in sql):
+            validated_sql = interpolate_sql_params(sql, params)
+        else:
+            validated_sql = interpolate_sql_params(sql, None)
+            if params is not None:
+                placeholders = ", ".join("?" for _ in params)
+                if placeholders:
+                    interpolate_sql_params(f"SELECT {placeholders}", params)
+
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        body: dict[str, Any] = {
+            "sql": validated_sql if interpolate else sql,
+            "addon": addon,
+            "actor_type": actor_type,
+        }
+        if params is not None and not interpolate:
+            body["params"] = list(params)
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/db/execute",
+            json=body,
+        )
+
+    def sqlite_download(self, environment_id: str | None = None) -> dict[str, Any]:
+        """Download a base64-encoded binary snapshot of the environment's SQLite database."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request("GET", f"/v1/environments/{env_id}/sqlite/download")
+
+    def sqlite_upload(
+        self,
+        sqlite_base64: str,
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Upload a base64-encoded SQLite database snapshot to replace the environment's SQLite file."""
+        if not sqlite_base64 or not sqlite_base64.strip():
+            raise ValueError("sqlite_base64 must be a non-empty string")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/sqlite/upload",
+            json={"sqlite_base64": sqlite_base64.strip()},
+        )
+
     def schema(
         self,
         environment_id: str | None = None,
@@ -630,6 +787,97 @@ class _DbResource:
                 "collection": collection,
                 "limit": resolved_limit,
             },
+        )
+
+    def vector_collections(self, environment_id: str | None = None) -> dict[str, Any]:
+        """List Qdrant vector collections in the environment."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request("GET", f"/v1/environments/{env_id}/vector/collections")
+
+    def vector_create_collection(
+        self,
+        name: str,
+        *,
+        dimensions: int = 384,
+        distance: str = "Cosine",
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new Qdrant vector collection in the environment."""
+        if not name or not name.strip():
+            raise ValueError("name must be a non-empty string")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/vector/collections",
+            json={"name": name.strip(), "dimensions": dimensions, "distance": distance},
+        )
+
+    def vector_upsert(
+        self,
+        points: list[dict[str, Any]],
+        *,
+        collection: str = "clinical_notes",
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Upsert documents/embeddings into the environment's Qdrant vector collection."""
+        if not points or not isinstance(points, list):
+            raise ValueError("points must be a non-empty list")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/vector/upsert",
+            json={"collection": collection, "points": points},
+        )
+
+    def vector_delete(
+        self,
+        ids: list[str],
+        *,
+        collection: str = "clinical_notes",
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Delete vector points by ID from the environment's Qdrant vector collection."""
+        if not ids or not isinstance(ids, list):
+            raise ValueError("ids must be a non-empty list")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/vector/delete",
+            json={"collection": collection, "ids": ids},
+        )
+
+    def graph_schema(self, environment_id: str | None = None) -> dict[str, Any]:
+        """Retrieve node labels, relationship types, and counts from the Neo4j Graph DB module."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request("GET", f"/v1/environments/{env_id}/graph/schema")
+
+    def graph_write(
+        self,
+        cypher: str,
+        *,
+        parameters: dict[str, Any] | None = None,
+        environment_id: str | None = None,
+    ) -> DbGraphQueryResponse:
+        """Execute a Cypher write (`CREATE` / `MERGE` / `DELETE`) against the environment's Neo4j Graph DB module."""
+        return self.graph_query(
+            cypher,
+            parameters=parameters,
+            environment_id=environment_id,
         )
 
     def graph_query(
