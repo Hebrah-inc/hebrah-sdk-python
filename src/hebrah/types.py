@@ -743,13 +743,13 @@ _ENCODED_TRAVERSAL_OR_SEP_RE = re.compile(r"%(?:2e|2f|5c|00)", re.IGNORECASE)
 _OCTAL_OR_HEX_IPV4_PART_RE = re.compile(r"^(?:0x[0-9a-f]+|0[0-7]+)$", re.IGNORECASE)
 
 _QUICK_SECRET_CHECK_RE = re.compile(
-    r"hb_|enc:v1:|PrivateKey|Bearer\s|[sr]k_(?:live|test)_|whsec_|eyJ|(?:postgres|redis)",
+    r"hb_|enc:v[12]:|PrivateKey|Bearer\s|[sr]k_(?:live|test)_|whsec_|eyJ|(?:postgres|redis)",
     re.IGNORECASE,
 )
 
 _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"hb_(?:live|test|pat|conn|claim)_[A-Za-z0-9_\-]+"), "[REDACTED_HEBRAH_TOKEN]"),
-    (re.compile(r"enc:v1:[A-Za-z0-9+/=_\-:]+"), "[REDACTED_CIPHERTEXT]"),
+    (re.compile(r"hb_(?:live|test|pat|conn|claim|onb)_[A-Za-z0-9_\-]+"), "[REDACTED_HEBRAH_TOKEN]"),
+    (re.compile(r"enc:v[12]:[A-Za-z0-9+/=_\-:]+"), "[REDACTED_CIPHERTEXT]"),
     (re.compile(r"(PrivateKey\s*=\s*)[^\s\n\r]+", re.IGNORECASE), r"\1[REDACTED]"),
     (re.compile(r"(Bearer\s+)[A-Za-z0-9._\-+/=]+", re.IGNORECASE), r"\1[REDACTED]"),
     (

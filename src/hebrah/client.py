@@ -1036,6 +1036,138 @@ class _AgentResource:
             },
         )
 
+    def invite_human(
+        self,
+        owner_email: str | None = None,
+        *,
+        invite_email: str | None = None,
+        human_email: str | None = None,
+        agent_name: str | None = None,
+        message: str | None = None,
+    ) -> dict[str, Any]:
+        """Send or refresh a claim handoff URL for a human operator on this agent account."""
+        resolved_email = (owner_email or invite_email or human_email or "").strip()
+        if not resolved_email or "@" not in resolved_email:
+            raise ValueError("owner_email (or invite_email) must be a valid email address")
+        body: dict[str, Any] = {
+            "invite_email": resolved_email,
+            "owner_email": resolved_email,
+        }
+        if agent_name and agent_name.strip():
+            body["agent_name"] = agent_name.strip()
+        if message and message.strip():
+            body["message"] = message.strip()
+        return self._client._request("POST", "/v1/agent/invite-human", json=body)
+
+
+class _ConciergeResource:
+    """Two-Stage Hosted Personal Concierge (Stage 1 Onboarding & Stage 2 Account/Environment Studio)."""
+
+    def __init__(self, client: HebrahClient) -> None:
+        self._client = client
+
+    def chat(
+        self,
+        message: str,
+        *,
+        session_id: str | None = None,
+        session_token: str | None = None,
+        onboarding_token: str | None = None,
+        environment_id: str | None = None,
+        actor_mode: str | None = None,
+        account_mode: str | None = None,
+        action: str | None = None,
+        agent_name: str | None = None,
+        org_name: str | None = None,
+        owner_email: str | None = None,
+        invite_email: str | None = None,
+        apply_changes: bool = True,
+    ) -> dict[str, Any]:
+        """Chat with the Hosted Personal Concierge & Account/Environment Studio Agent."""
+        if not message or not isinstance(message, str) or not message.strip():
+            raise ValueError("message must be a non-empty string")
+        body: dict[str, Any] = {
+            "message": message.strip(),
+            "apply_changes": apply_changes,
+            "auto_run_tools": apply_changes,
+        }
+        if session_id:
+            body["session_id"] = session_id.strip()
+        resolved_token = session_token or onboarding_token
+        if resolved_token:
+            body["session_token"] = resolved_token.strip()
+        resolved_env = environment_id or self._client._environment_id
+        if resolved_env:
+            body["environment_id"] = resolved_env
+            body["target_environment_id"] = resolved_env
+        resolved_mode = account_mode or actor_mode
+        if resolved_mode:
+            body["account_mode"] = resolved_mode
+        if action:
+            body["action"] = action
+        if agent_name:
+            body["agent_name"] = agent_name.strip()
+        if org_name:
+            body["org_name"] = org_name.strip()
+        resolved_email = invite_email or owner_email
+        if resolved_email:
+            body["invite_email"] = resolved_email.strip()
+        return self._client._request("POST", "/v1/concierge/chat", json=body)
+
+    def claim(
+        self,
+        session_id: str | None = None,
+        *,
+        session_token: str | None = None,
+        onboarding_token: str | None = None,
+        auto_provision: bool = True,
+        confirm_provision: bool | None = None,
+        provision_now: bool | None = None,
+    ) -> dict[str, Any]:
+        """Link a pre-auth Stage 1 Concierge session to the authenticated organization."""
+        resolved_token = (session_token or onboarding_token or "").strip()
+        if not resolved_token:
+            raise ValueError("session_token (or onboarding_token) is required")
+        effective_provision = (
+            provision_now
+            if provision_now is not None
+            else (confirm_provision if confirm_provision is not None else auto_provision)
+        )
+        body: dict[str, Any] = {
+            "session_token": resolved_token,
+            "provision_now": bool(effective_provision),
+            "auto_provision": bool(effective_provision),
+        }
+        if session_id and session_id.strip():
+            body["session_id"] = session_id.strip()
+        return self._client._request("POST", "/v1/concierge/claim", json=body)
+
+    def sessions(self) -> dict[str, Any]:
+        """List Concierge and Studio sessions isolated to the caller's principal."""
+        return self._client._request("GET", "/v1/concierge/sessions")
+
+    def catalog(self) -> dict[str, Any]:
+        """Retrieve the public Hebrah Concierge knowledge base and data catalog."""
+        return self._client._request("GET", "/v1/concierge/catalog", skip_auth=True)
+
+    def invite_human(
+        self,
+        owner_email: str | None = None,
+        *,
+        invite_email: str | None = None,
+        human_email: str | None = None,
+        agent_name: str | None = None,
+        message: str | None = None,
+    ) -> dict[str, Any]:
+        """Invite a human operator to claim or adopt this agent organization."""
+        return self._client.agent.invite_human(
+            owner_email,
+            invite_email=invite_email,
+            human_email=human_email,
+            agent_name=agent_name,
+            message=message,
+        )
+
 
 class _SandboxResource:
     def __init__(self, client: HebrahClient) -> None:
@@ -1584,6 +1716,7 @@ class HebrahClient:
         self.db = _DbResource(self)
         self.connections = _ConnectionsResource(self)
         self.agent = _AgentResource(self)
+        self.concierge = _ConciergeResource(self)
         self.sandbox = _SandboxResource(self)
         self.patients = _PatientsResource(self)
         self.webhooks = _WebhooksResource(self)

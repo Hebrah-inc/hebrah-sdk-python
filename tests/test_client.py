@@ -496,14 +496,87 @@ def test_zero_data_leak_repr_ssrf_and_replay_window():
         respx.get(f"{BASE}/v1/environments").mock(
             return_value=httpx.Response(
                 500,
-                text="db error with token hb_pat_leakedtoken999999 and enc:v1:cipher12345",
+                text="db error with token hb_pat_leakedtoken999999, hb_onb_onboardtoken9999, enc:v1:cipher12345, and enc:v2:cipherv212345",
             )
         )
         with pytest.raises(HebrahApiError) as exc_info:
             client.environments.list()
         assert "hb_pat_leakedtoken999999" not in str(exc_info.value)
+        assert "hb_onb_onboardtoken9999" not in str(exc_info.value)
         assert "enc:v1:cipher12345" not in str(exc_info.value)
+        assert "enc:v2:cipherv212345" not in str(exc_info.value)
         assert "[REDACTED_HEBRAH_TOKEN]" in (exc_info.value.detail or "")
+
+
+@respx.mock
+def test_concierge_client_methods():
+    respx.get(f"{BASE}/v1/concierge/catalog").mock(
+        return_value=httpx.Response(
+            200,
+            json={"platform": "Hebrah", "archetypes": [{"id": "cardiology_center"}]},
+        )
+    )
+    respx.post(f"{BASE}/v1/concierge/chat").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "session_id": "cag-1",
+                "stage": "stage1_concierge",
+                "reply": "Welcome to Hebrah!",
+                "scope_classification": "in_scope",
+            },
+        )
+    )
+    respx.post(f"{BASE}/v1/concierge/claim").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "session_id": "cag-1",
+                "stage": "stage2_studio",
+                "reply": "Studio ready!",
+                "credentials_minted": {"pat": "hb_pat_new"},
+            },
+        )
+    )
+    respx.get(f"{BASE}/v1/concierge/sessions").mock(
+        return_value=httpx.Response(
+            200,
+            json={"sessions": [{"session_id": "cag-1", "stage": "stage2_studio"}]},
+        )
+    )
+    respx.post(f"{BASE}/v1/agent/invite-human").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "status": "invited",
+                "human_email": "founder@acmedigitalhealth.io",
+                "claim_url": "https://app.hebrah.com/claim-org/tok_123",
+            },
+        )
+    )
+
+    with HebrahClient(api_key="hb_pat_concierge12345678", base_url=BASE) as client:
+        cat = client.concierge.catalog()
+        assert cat["platform"] == "Hebrah"
+
+        chat_res = client.concierge.chat(
+            "What can Hebrah do for cardiology AI?",
+            onboarding_token="hb_onb_1234567890123456",
+        )
+        assert chat_res["session_id"] == "cag-1"
+
+        claim_res = client.concierge.claim(
+            session_id="cag-1",
+            onboarding_token="hb_onb_1234567890123456",
+            confirm_provision=True,
+        )
+        assert claim_res["stage"] == "stage2_studio"
+
+        sessions_res = client.concierge.sessions()
+        assert len(sessions_res["sessions"]) == 1
+
+        invite_res = client.concierge.invite_human("founder@acmedigitalhealth.io")
+        assert invite_res["status"] == "invited"
 
     with HebrahAgentHarness(pat="hb_pat_secret999988887777") as harness:
         assert "hb_pat_secret999988887777" not in repr(harness)
