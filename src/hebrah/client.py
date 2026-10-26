@@ -678,7 +678,7 @@ class _DbResource:
         params: Sequence[Any] | None = None,
         interpolate: bool = False,
     ) -> dict[str, Any]:
-        """Execute a controlled DML/DDL statement (`INSERT`, `UPDATE`, `DELETE`, `CREATE TABLE`) against Postgres or SQLite."""
+        """Execute a controlled DML/DDL statement against Postgres or SQLite."""
         if interpolate or (params is not None and "?" in sql):
             validated_sql = interpolate_sql_params(sql, params)
         else:
@@ -719,7 +719,7 @@ class _DbResource:
         *,
         environment_id: str | None = None,
     ) -> dict[str, Any]:
-        """Upload a base64-encoded SQLite database snapshot to replace the environment's SQLite file."""
+        """Upload a base64-encoded SQLite snapshot to replace the environment's SQLite file."""
         if not sqlite_base64 or not sqlite_base64.strip():
             raise ValueError("sqlite_base64 must be a non-empty string")
         env_id = safe_path_segment(
@@ -873,7 +873,7 @@ class _DbResource:
         parameters: dict[str, Any] | None = None,
         environment_id: str | None = None,
     ) -> DbGraphQueryResponse:
-        """Execute a Cypher write (`CREATE` / `MERGE` / `DELETE`) against the environment's Neo4j Graph DB module."""
+        """Execute a Cypher write (`CREATE` / `MERGE` / `DELETE`) against Neo4j Graph DB."""
         return self.graph_query(
             cypher,
             parameters=parameters,
@@ -1309,7 +1309,7 @@ class _AgentResource:
 
 
 class _ConciergeResource:
-    """Two-Stage Hosted Personal Concierge (Stage 1 Onboarding & Stage 2 Account/Environment Studio)."""
+    """Two-Stage Hosted Personal Concierge (Onboarding & Account/Environment Studio)."""
 
     def __init__(self, client: HebrahClient) -> None:
         self._client = client

@@ -496,7 +496,11 @@ def test_zero_data_leak_repr_ssrf_and_replay_window():
         respx.get(f"{BASE}/v1/environments").mock(
             return_value=httpx.Response(
                 500,
-                text="db error with token hb_pat_leakedtoken999999, hb_onb_onboardtoken9999, enc:v1:cipher12345, and enc:v2:cipherv212345",
+                text=(
+                    "db error with token hb_pat_leakedtoken999999, "
+                    "hb_onb_onboardtoken9999, enc:v1:cipher12345, "
+                    "and enc:v2:cipherv212345"
+                ),
             )
         )
         with pytest.raises(HebrahApiError) as exc_info:
