@@ -711,7 +711,11 @@ class _DbResource:
             self._client._resolve_environment_id(environment_id),
             "environment_id",
         )
-        return self._client._request("GET", f"/v1/environments/{env_id}/sqlite/download")
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/sqlite/download",
+            params={"format": "json"},
+        )
 
     def sqlite_upload(
         self,
