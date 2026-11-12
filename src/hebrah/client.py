@@ -434,12 +434,22 @@ class _EnvironmentsResource:
         *,
         count: int = 5,
         department: str | None = None,
+        departments: list[str] | None = None,
         acuity: str | None = None,
+        acuity_levels: list[str] | None = None,
+        diagnosis_pathways: list[str] | None = None,
+        treatment_modalities: list[str] | None = None,
+        patient_cohort: str | None = None,
+        specialty_pack_id: str | None = None,
+        condition_ids: list[str] | None = None,
+        depth: str | None = None,
+        branch_id: str | None = None,
+        notes: str | None = None,
         environment_id: str | None = None,
     ) -> AdmitPatientsResponse:
-        """Dynamically generate and admit new synthetic patients into the environment."""
-        if count < 1 or count > 100:
-            raise ValueError("count must be between 1 and 100")
+        """Dynamically generate and admit new synthetic patients (1..500) into the environment."""
+        if count < 1 or count > 500:
+            raise ValueError("count must be between 1 and 500")
         env_id = safe_path_segment(
             self._client._resolve_environment_id(environment_id),
             "environment_id",
@@ -447,8 +457,28 @@ class _EnvironmentsResource:
         body: dict[str, Any] = {"count": count}
         if department:
             body["department"] = department
+        if departments:
+            body["departments"] = departments
         if acuity:
             body["acuity"] = acuity
+        if acuity_levels:
+            body["acuity_levels"] = acuity_levels
+        if diagnosis_pathways:
+            body["diagnosis_pathways"] = diagnosis_pathways
+        if treatment_modalities:
+            body["treatment_modalities"] = treatment_modalities
+        if patient_cohort:
+            body["patient_cohort"] = patient_cohort
+        if specialty_pack_id:
+            body["specialty_pack_id"] = specialty_pack_id
+        if condition_ids:
+            body["condition_ids"] = condition_ids
+        if depth:
+            body["depth"] = depth
+        if branch_id:
+            body["branch_id"] = branch_id
+        if notes:
+            body["notes"] = notes
         return self._client._request(
             "POST",
             f"/v1/environments/{env_id}/ehr/patients/generate",
@@ -620,6 +650,363 @@ class _EnvironmentsResource:
             "GET",
             f"/v1/environments/{env_id}/logs",
             params=params or None,
+        )
+
+    def fhir_search(
+        self,
+        resource_type: str,
+        params: dict[str, str | int | bool] | None = None,
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Search environment-scoped FHIR R4 resources (Patient, MedicationRequest, etc.)."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        res_type = safe_path_segment(resource_type, "resource_type")
+        query_params = (
+            {k: str(v) for k, v in params.items() if v is not None}
+            if params
+            else None
+        )
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/fhir/{res_type}",
+            params=query_params,
+        )
+
+    def fhir_create(
+        self,
+        resource_type: str,
+        payload: dict[str, Any],
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create and persist a FHIR R4 resource in the environment."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        res_type = safe_path_segment(resource_type, "resource_type")
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/fhir/{res_type}",
+            json=payload,
+        )
+
+    def list_specialty_packs(
+        self,
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """List all 12 specialty condition packs available in the environment."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/specialty-packs",
+        )
+
+    def get_specialty_pack(
+        self,
+        specialty_id: str,
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Get a specialty condition pack (e.g., cardiology, geriatric_polypharmacy)."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        spec_id = safe_path_segment(specialty_id, "specialty_id")
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/specialty-packs/{spec_id}",
+        )
+
+    def list_ecg_exemplars(
+        self,
+        *,
+        superclass: str | None = None,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """List PTB-XL 12-lead ECG exemplars (ptbxl_ecg_v1) available for the environment."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        params = {"superclass": superclass} if superclass else None
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/ecg/exemplars",
+            params=params,
+        )
+
+    def list_ecg_studies(
+        self,
+        *,
+        patient_id: str | None = None,
+        superclass: str | None = None,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """List 12-lead ECG studies attached to patients in the environment."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        params: dict[str, str] = {}
+        if patient_id:
+            params["patient_id"] = patient_id
+        if superclass:
+            params["superclass"] = superclass
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/ecg/studies",
+            params=params or None,
+        )
+
+    def get_ecg_study(
+        self,
+        study_or_ecg_id: str | int,
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Retrieve a specific 12-lead ECG study or PTB-XL exemplar record in the environment."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        sid = safe_path_segment(str(study_or_ecg_id), "study_id")
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/ecg/studies/{sid}",
+        )
+
+    def get_ecg_waveform(
+        self,
+        study_or_ecg_id: str | int,
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Retrieve 12-lead 100 Hz waveform samples (I-III, aVR-aVF, V1-V6) for an ECG study."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        sid = safe_path_segment(str(study_or_ecg_id), "study_id")
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/ecg/studies/{sid}/waveform",
+        )
+
+    def attach_ecg_study(
+        self,
+        *,
+        patient_id: str,
+        ecg_id: int | str | None = None,
+        superclass: str | None = None,
+        clinical_notes: str | None = None,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Attach a PTB-XL 12-lead ECG study to an environment patient."""
+        if not patient_id or not patient_id.strip():
+            raise ValueError("patient_id must be a non-empty string")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        body: dict[str, Any] = {"patient_id": patient_id.strip()}
+        if ecg_id is not None:
+            body["ecg_id"] = ecg_id
+        if superclass:
+            body["superclass"] = superclass
+        if clinical_notes:
+            body["clinical_notes"] = clinical_notes
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/ecg/studies",
+            json=body,
+        )
+
+    def compare_ecgs(
+        self,
+        *,
+        left_ecg_id: int | str,
+        right_ecg_id: int | str,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Compare two PTB-XL 12-lead ECG studies side-by-side (amplitude & RMS lead deltas)."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/ecg/compare",
+            json={
+                "left_ecg_id": left_ecg_id,
+                "right_ecg_id": right_ecg_id,
+            },
+        )
+
+    def list_cohort_branches(
+        self,
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """List saved research cohort branches in the environment."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/cohorts/branches",
+        )
+
+    def create_cohort_branch(
+        self,
+        *,
+        name: str,
+        specialty_pack_id: str = "cardiology",
+        condition_ids: list[str] | None = None,
+        count: int = 10,
+        depth: str = "standard",
+        notes: str | None = None,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a named specialty cohort branch and admit its synthetic patients."""
+        if not name or not name.strip():
+            raise ValueError("name must be a non-empty string")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        body: dict[str, Any] = {
+            "name": name.strip(),
+            "specialty_pack_id": specialty_pack_id,
+            "count": count,
+            "depth": depth,
+        }
+        if condition_ids:
+            body["condition_ids"] = condition_ids
+        if notes:
+            body["notes"] = notes
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/cohorts/branches",
+            json=body,
+        )
+
+    def fork_cohort_branch(
+        self,
+        branch_id: str,
+        *,
+        name: str | None = None,
+        condition_ids: list[str] | None = None,
+        count: int | None = None,
+        depth: str | None = None,
+        notes: str | None = None,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Fork an existing cohort branch into a derived A/B comparison branch."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        bid = safe_path_segment(branch_id, "branch_id")
+        body: dict[str, Any] = {}
+        if name:
+            body["name"] = name
+        if condition_ids:
+            body["condition_ids"] = condition_ids
+        if count is not None:
+            body["count"] = count
+        if depth:
+            body["depth"] = depth
+        if notes:
+            body["notes"] = notes
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/cohorts/branches/{bid}/fork",
+            json=body,
+        )
+
+    def compare_cohort_branches(
+        self,
+        *,
+        left: str,
+        right: str,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Compare two cohort branches across acuity, conditions, ECG superclasses, and claims."""
+        if not left or not right:
+            raise ValueError("left and right branch IDs are required")
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/cohorts/branches/compare",
+            params={"left": left.strip(), "right": right.strip()},
+        )
+
+    def evaluate_prescribing_cascade(
+        self,
+        *,
+        patient_id: str | None = None,
+        encounter_id: str | None = None,
+        proposed_rxnorm: str | None = None,
+        proposed_display: str | None = None,
+        hook: str = "order-sign",
+        hook_instance: str | None = None,
+        context: dict[str, Any] | None = None,
+        prefetch: dict[str, Any] | None = None,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Evaluate HL7 CDS Hooks 2.0 (order-sign / order-select) cascade detection."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        body: dict[str, Any] = {"hook": hook}
+        if hook_instance:
+            body["hookInstance"] = hook_instance
+        if context:
+            body["context"] = context
+        if patient_id:
+            body["patient_id"] = patient_id
+        if encounter_id:
+            body["encounter_id"] = encounter_id
+        if proposed_rxnorm:
+            body["proposed_rxnorm"] = proposed_rxnorm
+        if proposed_display:
+            body["proposed_display"] = proposed_display
+        if prefetch:
+            body["prefetch"] = prefetch
+        return self._client._request(
+            "POST",
+            f"/v1/environments/{env_id}/cds-hooks/prescribing-cascade",
+            json=body,
+        )
+
+    def x12_benchmark(
+        self,
+        *,
+        environment_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Compare environment X12 837/835 claims against CMS Medicare utilization benchmarks."""
+        env_id = safe_path_segment(
+            self._client._resolve_environment_id(environment_id),
+            "environment_id",
+        )
+        return self._client._request(
+            "GET",
+            f"/v1/environments/{env_id}/x12/benchmark",
         )
 
 
@@ -1797,8 +2184,17 @@ class _FhirResource:
         params: dict[str, str | int | bool] | None = None,
         *,
         access_token: str | None = None,
+        environment_id: str | None = None,
     ) -> dict[str, Any]:
         res_type = safe_path_segment(resource_type, "resource_type")
+        eff_env = environment_id or self._client._environment_id
+        if eff_env and not access_token:
+            safe_env = safe_path_segment(eff_env, "environment_id")
+            return self._fhir_get(
+                f"/v1/environments/{safe_env}/fhir/{res_type}",
+                params=params,
+                error_prefix=f"FHIR {res_type} search",
+            )
         return self._fhir_get(
             f"/fhir/R4/{res_type}",
             access_token=access_token,

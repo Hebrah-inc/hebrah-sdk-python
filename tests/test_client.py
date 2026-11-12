@@ -603,3 +603,142 @@ def test_concierge_client_methods():
     with pytest.raises(ValueError, match="Webhook timestamp outside allowed replay window"):
         verify_webhook_signature(raw, sig, secret, max_age_seconds=300, now_timestamp=now_ts)
 
+
+@respx.mock
+def test_cardiology_specialty_packs_cohort_branches_and_prescribing_cascade():
+    respx.post(f"{BASE}/v1/environments/env-cardio-1/ehr/patients/generate").mock(
+        return_value=httpx.Response(
+            200,
+            json={"environment_id": "env-cardio-1", "admitted_count": 250},
+        )
+    )
+    respx.get(f"{BASE}/v1/environments/env-cardio-1/fhir/MedicationRequest").mock(
+        return_value=httpx.Response(
+            200,
+            json={"resourceType": "Bundle", "total": 6, "entry": []},
+        )
+    )
+    respx.get(f"{BASE}/v1/environments/env-cardio-1/specialty-packs").mock(
+        return_value=httpx.Response(
+            200,
+            json={"count": 12, "packs": [{"id": "cardiology"}, {"id": "geriatric_polypharmacy"}]},
+        )
+    )
+    respx.get(f"{BASE}/v1/environments/env-cardio-1/specialty-packs/cardiology").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": "cardiology", "conditions": []},
+        )
+    )
+    respx.get(f"{BASE}/v1/environments/env-cardio-1/ecg/exemplars").mock(
+        return_value=httpx.Response(
+            200,
+            json={"exemplars": [{"ecg_id": 4, "superclass": "MI"}]},
+        )
+    )
+    respx.post(f"{BASE}/v1/environments/env-cardio-1/ecg/studies").mock(
+        return_value=httpx.Response(
+            201,
+            json={"ok": True, "study": {"id": "ecg-study-1", "ecg_id": 4}},
+        )
+    )
+    respx.post(f"{BASE}/v1/environments/env-cardio-1/ecg/compare").mock(
+        return_value=httpx.Response(
+            200,
+            json={"left_ecg_id": 1, "right_ecg_id": 4},
+        )
+    )
+    respx.post(f"{BASE}/v1/environments/env-cardio-1/cohorts/branches").mock(
+        return_value=httpx.Response(
+            200,
+            json={"ok": True, "branch": {"id": "br-1", "name": "STEMI Arm A"}},
+        )
+    )
+    respx.get(f"{BASE}/v1/environments/env-cardio-1/cohorts/branches/compare").mock(
+        return_value=httpx.Response(
+            200,
+            json={"left_branch_id": "br-1", "right_branch_id": "br-2"},
+        )
+    )
+    respx.post(f"{BASE}/v1/environments/env-cardio-1/cds-hooks/prescribing-cascade").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "cards": [{"indicator": "critical", "summary": "Prescribing Cascade Detected"}],
+                "environment_id": "env-cardio-1",
+                "patient_id": "pat-013",
+                "ground_truth": {
+                    "is_prescribing_cascade": True,
+                    "cascade_class": "positive_cascade",
+                },
+            },
+        )
+    )
+    respx.get(f"{BASE}/v1/environments/env-cardio-1/x12/benchmark").mock(
+        return_value=httpx.Response(
+            200,
+            json={"pack_id": "medicare_utilization_v1"},
+        )
+    )
+
+    with HebrahClient(
+        api_key="hb_test_key",
+        base_url=BASE,
+        environment_id="env-cardio-1",
+    ) as client:
+        # 1. Batch admit 250 patients (>100 previously failed) with specialty pack & rich depth
+        admit_res = client.environments.admit_patients(
+            count=250,
+            specialty_pack_id="geriatric_polypharmacy",
+            condition_ids=["ger_cascade_oxybutynin_delirium_antipsychotic"],
+            depth="rich",
+            branch_id="br-1",
+        )
+        assert admit_res["admitted_count"] == 250
+
+        with pytest.raises(ValueError, match="count must be between 1 and 500"):
+            client.environments.admit_patients(count=501)
+
+        # 2. Environment-scoped FHIR search
+        bundle = client.fhir.search("MedicationRequest", {"patient": "pat-013", "_count": 100})
+        assert bundle["resourceType"] == "Bundle"
+
+        # 3. Specialty packs
+        packs = client.environments.list_specialty_packs()
+        assert packs["count"] == 12
+        cardio_pack = client.environments.get_specialty_pack("cardiology")
+        assert cardio_pack["id"] == "cardiology"
+
+        # 4. PTB-XL 12-lead ECGs
+        exemplars = client.environments.list_ecg_exemplars(superclass="MI")
+        assert len(exemplars["exemplars"]) == 1
+        attached = client.environments.attach_ecg_study(
+            patient_id="pat-013", ecg_id=4, superclass="MI"
+        )
+        assert attached["ok"] is True
+        compared = client.environments.compare_ecgs(left_ecg_id=1, right_ecg_id=4)
+        assert compared["right_ecg_id"] == 4
+
+        # 5. Cohort branching
+        br = client.environments.create_cohort_branch(
+            name="STEMI Arm A",
+            specialty_pack_id="cardiology",
+            count=10,
+            depth="rich",
+        )
+        assert br["ok"] is True
+        diff = client.environments.compare_cohort_branches(left="br-1", right="br-2")
+        assert diff["left_branch_id"] == "br-1"
+
+        # 6. Prescribing cascade CDS hook & CMS X12 benchmark
+        cds = client.environments.evaluate_prescribing_cascade(
+            patient_id="pat-013",
+            proposed_rxnorm="312961",
+            proposed_display="Quetiapine 25 MG Oral Tablet",
+        )
+        assert cds["ground_truth"]["is_prescribing_cascade"] is True
+
+        bench = client.environments.x12_benchmark()
+        assert bench["pack_id"] == "medicare_utilization_v1"
+
+

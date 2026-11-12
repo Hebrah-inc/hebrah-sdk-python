@@ -172,4 +172,4 @@ __all__ = [
     "verify_webhook_signature",
 ]
 
-__version__ = "0.9.3"
+__version__ = "0.9.4"
