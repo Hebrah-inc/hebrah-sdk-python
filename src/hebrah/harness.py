@@ -364,20 +364,22 @@ class HebrahAgentHarness:
     def discover_connectors(
         self,
         *,
+        pack: str | None = None,
         pack_id: str | None = None,
-        demo_only: bool = False,
+        healthy: bool = False,
     ) -> dict[str, Any]:
-        """List connector packs and targets available on the platform."""
+        """List Healthcare and Database connector targets available on the platform."""
         args: dict[str, Any] = {}
-        if pack_id:
-            args["pack_id"] = pack_id
-        if demo_only:
-            args["demo_only"] = True
-        return self._mcp_call("list_connector_targets", args)
+        effective_pack = pack or pack_id
+        if effective_pack:
+            args["pack"] = effective_pack
+        if healthy:
+            args["healthy"] = True
+        return self._mcp_call("discover_data_sources", args)
 
     def verify_audit_chain(self, connection_id: str) -> dict[str, Any]:
-        """Verify cryptographic SHA-256 hash chain for a connection's audit log."""
-        return self._mcp_call("verify_audit_chain", {"connection_id": connection_id})
+        """Retrieve cryptographic SHA-256 hash-chained audit trail for a connection."""
+        return self._mcp_call("get_data_source_audit", {"connectionId": connection_id})
 
     def research_and_model_ehr(
         self,

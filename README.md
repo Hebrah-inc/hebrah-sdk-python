@@ -108,7 +108,9 @@ See [SECURITY.md](./SECURITY.md) for supported versions and vulnerability report
 
 | Method | Description |
 |--------|-------------|
-| `client.connections.targets(include_all=False)` | `GET /v1/connections/targets` — list connector pack targets |
+| `client.connections.targets(pack=None, healthy=False, include_all=False)` | `GET /v1/connections/targets` — list Healthcare & Database connector targets |
+| `client.connections.target(target_id)` | `GET /v1/connections/targets/{id}` — get target scope grammar & metadata |
+| `client.connections.packs(include_all=False)` | `GET /v1/connections/packs` — list the 2 active connector packs (`healthcare`, `database`) |
 | `client.connections.list()` | `GET /v1/connections` — list scoped connections |
 | `client.connections.get(connection_id=None)` | `GET /v1/connections/{id}` |
 | `client.connections.create(target_id, scopes=None, mode=None, display_name=None, credentials=None)` | `POST /v1/connections` |

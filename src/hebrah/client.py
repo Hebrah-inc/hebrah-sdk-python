@@ -30,6 +30,7 @@ from .types import (
     ConnectionScenarioResponse,
     ConnectionScopeDict,
     ConnectionTargetsResponse,
+    ConnectionTargetSummary,
     ConnectorPackSummary,
     ConnectorTargetSummary,
     ConsultArchitectResponse,
@@ -1344,55 +1345,65 @@ class _ConnectionsResource:
     def targets(
         self,
         *,
+        pack: str | None = None,
         pack_id: str | None = None,
         mode: str | None = None,
-        include_incubating: bool = False,
+        healthy: bool = False,
         include_all: bool = False,
-    ) -> ConnectionTargetsResponse:
+    ) -> ConnectionTargetsResponse | list[ConnectionTargetSummary]:
         params: dict[str, str] = {}
-        if pack_id:
-            params["pack_id"] = pack_id
+        effective_pack = pack or pack_id
+        if effective_pack:
+            params["pack"] = effective_pack
         if mode:
             params["mode"] = mode
-        if include_incubating:
-            params["include_incubating"] = "true"
+        if healthy:
+            params["healthy"] = "true"
         if include_all:
-            params["include_all"] = "true"
+            params["all"] = "true"
         return self._client._request(
             "GET",
             "/v1/connections/targets",
             params=params or None,
         )
 
-    def list_packs(self, *, include_all: bool = False) -> list[ConnectorPackSummary]:
+    def packs(self, *, include_all: bool = False) -> list[ConnectorPackSummary]:
         params = {"all": "true"} if include_all else None
-        data = self._client._request("GET", "/v1/connectors/packs", params=params)
+        data = self._client._request("GET", "/v1/connections/packs", params=params)
         return data.get("packs", data) if isinstance(data, dict) else data
+
+    def list_packs(self, *, include_all: bool = False) -> list[ConnectorPackSummary]:
+        return self.packs(include_all=include_all)
 
     def list_targets(
         self,
         *,
+        pack: str | None = None,
         pack_id: str | None = None,
-        demo_only: bool = False,
+        healthy: bool = False,
         include_all: bool = False,
     ) -> list[ConnectorTargetSummary]:
         params: dict[str, str] = {}
-        if pack_id:
-            params["pack_id"] = pack_id
-        if demo_only:
-            params["demo_only"] = "true"
+        effective_pack = pack or pack_id
+        if effective_pack:
+            params["pack"] = effective_pack
+        if healthy:
+            params["healthy"] = "true"
         if include_all:
             params["all"] = "true"
         data = self._client._request(
             "GET",
-            "/v1/connectors/targets",
+            "/v1/connections/targets",
             params=params or None,
         )
         return data.get("targets", data) if isinstance(data, dict) else data
 
-    def get_target(self, target_id: str) -> ConnectorTargetSummary:
+    def target(self, target_id: str) -> ConnectorTargetSummary:
         tid = safe_path_segment(target_id, "target_id")
-        return self._client._request("GET", f"/v1/connectors/targets/{tid}")
+        return self._client._request("GET", f"/v1/connections/targets/{tid}")
+
+    def get_target(self, target_id: str) -> ConnectorTargetSummary:
+        return self.target(target_id)
 
     def list(
         self,

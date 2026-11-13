@@ -421,7 +421,27 @@ def test_connections_and_agent_resources():
     respx.get(f"{BASE}/v1/connections/targets").mock(
         return_value=httpx.Response(
             200,
-            json={"targets": [{"id": "epic-sandbox", "name": "Epic"}], "total": 1},
+            json={
+                "targets": [
+                    {"id": "demo-fhir-synthetic", "pack_id": "healthcare", "name": "FHIR R4"}
+                ],
+                "total": 1,
+            },
+        )
+    )
+    respx.get(f"{BASE}/v1/connections/packs").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"pack_id": "healthcare", "label": "Healthcare", "status": "active"},
+                {"pack_id": "database", "label": "Database", "status": "active"},
+            ],
+        )
+    )
+    respx.get(f"{BASE}/v1/connections/targets/demo-fhir-synthetic").mock(
+        return_value=httpx.Response(
+            200,
+            json={"target_id": "demo-fhir-synthetic", "pack_id": "healthcare", "connector": "fhir"},
         )
     )
     respx.get(f"{BASE}/v1/connections").mock(
@@ -460,9 +480,17 @@ def test_connections_and_agent_resources():
         base_url=BASE,
         default_connection_id="conn-1",
     ) as client:
-        targets = client.connections.targets(include_all=True)
+        targets = client.connections.targets(pack="healthcare", include_all=True)
         assert targets["total"] == 1
-        assert respx.calls[0].request.url.params["include_all"] == "true"
+        assert respx.calls[0].request.url.params["pack"] == "healthcare"
+        assert respx.calls[0].request.url.params["all"] == "true"
+
+        packs = client.connections.packs()
+        assert len(packs) == 2
+        assert {p["pack_id"] for p in packs} == {"healthcare", "database"}
+
+        target_detail = client.connections.target("demo-fhir-synthetic")
+        assert target_detail["pack_id"] == "healthcare"
 
         conns = client.connections.list()
         assert len(conns["connections"]) == 1
@@ -484,7 +512,7 @@ def test_connections_and_agent_resources():
 
         ledger = client.agent.ledger(limit=5)
         assert len(ledger["entries"]) == 1
-        assert respx.calls[7].request.url.params["limit"] == "5"
+        assert respx.calls[-1].request.url.params["limit"] == "5"
 
 
 @respx.mock

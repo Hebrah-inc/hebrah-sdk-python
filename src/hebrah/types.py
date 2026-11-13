@@ -562,16 +562,27 @@ class EnvironmentLogItem(TypedDict, total=False):
 
 
 class ConnectionTargetSummary(TypedDict, total=False):
+    target_id: str
+    target: str
     id: str
     name: str
+    label: str
     pack_id: str
-    pack_name: str
+    pack_label: str
+    pack_status: str
+    connector: str
     driver: str
     mode: str
     description: str
+    required_scopes: list[str]
+    example_scopes: list[str]
     available_scopes: list[str]
     tables: list[str]
-    incubating: bool
+    tiers: list[str]
+    writes_allowed: bool
+    health: str
+    relay_required: bool
+    wave: int
 
 
 class ConnectionTargetsResponse(TypedDict, total=False):
